@@ -1749,14 +1749,29 @@ const hgFileInput = document.getElementById('hgFile');
 const hgRows = document.getElementById('hgRows');
 let hgFileData = null; // { name, bytes } when a file is loaded instead of text
 
+const HG_BASH = {MD5:'md5sum', SHA1:'shasum -a 1', SHA224:'shasum -a 224', SHA256:'shasum -a 256', SHA384:'shasum -a 384', SHA512:'shasum -a 512'};
 const hgOutputs = HG_ALGOS.map(([name]) => {
   const row = document.createElement('div');
   row.className = 'hg-row';
-  row.innerHTML = '<span class="nb-label">' + name + ':</span>' +
+  const bashBtn = HG_BASH[name] ? '<button class="btn hg-bash">📋 Copy Bash Command</button>' : '';
+  row.innerHTML = '<div class="hg-header"><span class="nb-label">' + name + ':</span>' +
+    (bashBtn ? ' ' + bashBtn : '') + '</div>' +
     '<div class="nb-field"><input type="text" class="nb-input hg-input" readonly spellcheck="false"><button class="btn">📋 Copy</button></div>';
   hgRows.appendChild(row);
   const input = row.querySelector('input');
-  row.querySelector('button').onclick = e => copyText(input.value, e.currentTarget);
+  row.querySelector('.nb-field .btn').onclick = e => copyText(input.value, e.currentTarget);
+  if (HG_BASH[name]) {
+    row.querySelector('.hg-bash').onclick = () => {
+      const text = hgInput.value;
+      const cmd = HG_BASH[name] + " ";
+      navigator.clipboard.writeText(cmd).then(() => {
+        const btn = row.querySelector('.hg-bash');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    };
+  }
   return input;
 });
 

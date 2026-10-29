@@ -314,6 +314,7 @@
   .hg-info{font-size:14px;color:var(--text)}
   .hg-rows{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
   .hg-row{display:flex;flex-direction:column;gap:6px;flex:none}
+  .hg-header{display:flex;align-items:center;gap:6px}
   .hg-input{flex:1;min-width:0;height:34px;font-size:13px}
 
   /* date calculator */
