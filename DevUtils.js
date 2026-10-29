@@ -3,7 +3,6 @@ const TOOLS = [
   ['🕘','Unix Time Converter'],
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
-  ['#;','HTML Entity Encode/Decode'],
   ['±','Text Diff Checker'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter']
 ];
@@ -39,6 +38,7 @@ function selectTool(name) {
   const b64ToolEl = document.getElementById('b64Tool');
   const yamlToolEl = document.getElementById('yamlTool');
   const propToolEl = document.getElementById('propTool');
+  const nbToolEl = document.getElementById('nbTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -47,6 +47,7 @@ function selectTool(name) {
   b64ToolEl.style.display = 'none';
   yamlToolEl.style.display = 'none';
   propToolEl.style.display = 'none';
+  nbToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -69,6 +70,8 @@ function selectTool(name) {
     propToolEl.style.display = 'flex';
     propDirectionSel.value = name === 'YAML to Property' ? 'y2p' : 'p2y';
     runProp();
+  } else if (name === 'Number Base Converter') {
+    nbToolEl.style.display = 'flex';
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -1280,6 +1283,89 @@ document.getElementById('propUseAsInput').onclick = () => {
   if (propDirectionSel.value !== 'auto') propDirectionSel.value = dir === 'y2p' ? 'p2y' : 'y2p';
   runProp();
 };
+
+/* ---------------- Number Base Converter ---------------- */
+const NB_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+const nbFields = [...document.querySelectorAll('#nbTool .nb-input')];
+const nbCustomInput = document.getElementById('nbCustom');
+const nbCustomBaseSel = document.getElementById('nbCustomBase');
+const nbStatus = document.getElementById('nbStatus');
+
+for (let b = 2; b <= 36; b++) nbCustomBaseSel.add(new Option(String(b), String(b)));
+nbCustomBaseSel.value = '36';
+
+function nbBaseOf(el) {
+  return el === nbCustomInput ? Number(nbCustomBaseSel.value) : Number(el.dataset.base);
+}
+
+// Parses text in the given base into a BigInt (optional leading sign, spaces/underscores ignored)
+function nbParse(text, base) {
+  let s = text.replace(/[\s_]/g, '').toLowerCase();
+  let neg = false;
+  if (s[0] === '-' || s[0] === '+') { neg = s[0] === '-'; s = s.slice(1); }
+  if (base === 16) s = s.replace(/^0x/, '');
+  else if (base === 8) s = s.replace(/^0o/, '');
+  else if (base === 2) s = s.replace(/^0b/, '');
+  if (s === '') throw new Error('Missing digits');
+  const B = BigInt(base);
+  let n = 0n;
+  for (const c of s) {
+    const d = NB_DIGITS.indexOf(c);
+    if (d < 0 || d >= base) throw new Error("Invalid digit '" + c + "' for base " + base);
+    n = n * B + BigInt(d);
+  }
+  return neg ? -n : n;
+}
+
+function nbFormat(n, base) {
+  return n.toString(base);
+}
+
+let nbValue = null; // the number currently shown (BigInt), or null when empty/invalid
+
+function nbUpdate(source) {
+  nbStatus.className = 'url-status';
+  nbStatus.textContent = '';
+  nbValue = null;
+  for (const f of nbFields) f.classList.remove('err');
+  const text = source.value;
+  if (text.trim() === '') {
+    for (const f of nbFields) if (f !== source) f.value = '';
+    return;
+  }
+  let n;
+  try {
+    n = nbParse(text, nbBaseOf(source));
+  } catch (e) {
+    source.classList.add('err');
+    nbStatus.className = 'url-status bad';
+    nbStatus.textContent = e.message;
+    for (const f of nbFields) if (f !== source) f.value = '';
+    return;
+  }
+  nbValue = n;
+  for (const f of nbFields) if (f !== source) f.value = nbFormat(n, nbBaseOf(f));
+}
+
+for (const f of nbFields) f.addEventListener('input', () => nbUpdate(f));
+nbCustomBaseSel.addEventListener('change', () => {
+  // keep the number; only redraw the custom-base field in the newly selected base
+  if (nbValue !== null) {
+    nbCustomInput.classList.remove('err');
+    nbCustomInput.value = nbFormat(nbValue, nbBaseOf(nbCustomInput));
+  }
+});
+document.querySelectorAll('#nbTool [data-nb-clear]').forEach(btn => {
+  btn.onclick = () => {
+    const el = document.getElementById(btn.dataset.nbClear);
+    el.value = '';
+    nbUpdate(el);
+    el.focus();
+  };
+});
+document.querySelectorAll('#nbTool [data-nb-copy]').forEach(btn => {
+  btn.onclick = e => copyText(document.getElementById(btn.dataset.nbCopy).value, e.currentTarget);
+});
 
 /* boot with Unix Time Converter */
 selectTool('Unix Time Converter');

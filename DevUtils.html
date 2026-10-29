@@ -422,6 +422,36 @@
         </section>
       </div>
 
+      <!-- Number Base Converter Tool View -->
+      <div class="url-tool nb-tool" id="nbTool" style="display:none">
+        <p class="nb-intro">Enter your number in any of the text fields. The other text fields will be calculated automatically.</p>
+        <div class="nb-row">
+          <div class="nb-head"><span class="nb-label">Base 2 (Binary)</span><button class="btn nb-mini" data-nb-clear="nb2">Clear</button></div>
+          <div class="nb-field"><input type="text" class="nb-input" id="nb2" data-base="2" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" data-nb-copy="nb2">📋 Copy</button></div>
+        </div>
+        <div class="nb-row">
+          <div class="nb-head"><span class="nb-label">Base 8 (Octal)</span><button class="btn nb-mini" data-nb-clear="nb8">Clear</button></div>
+          <div class="nb-field"><input type="text" class="nb-input" id="nb8" data-base="8" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" data-nb-copy="nb8">📋 Copy</button></div>
+        </div>
+        <div class="nb-row">
+          <div class="nb-head"><span class="nb-label">Base 10 (Decimal)</span><button class="btn nb-mini" data-nb-clear="nb10">Clear</button></div>
+          <div class="nb-field"><input type="text" class="nb-input" id="nb10" data-base="10" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" data-nb-copy="nb10">📋 Copy</button></div>
+        </div>
+        <div class="nb-row">
+          <div class="nb-head"><span class="nb-label">Base 16 (Hex)</span><button class="btn nb-mini" data-nb-clear="nb16">Clear</button></div>
+          <div class="nb-field"><input type="text" class="nb-input" id="nb16" data-base="16" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" data-nb-copy="nb16">📋 Copy</button></div>
+        </div>
+        <div class="nb-row">
+          <div class="nb-head">
+            <span class="nb-label">Select base:</span>
+            <div class="select" title="Custom base (2–36)"><select id="nbCustomBase"></select><span class="chev">▲<br>▼</span></div>
+            <button class="btn nb-mini" data-nb-clear="nbCustom">Clear</button>
+          </div>
+          <div class="nb-field"><input type="text" class="nb-input" id="nbCustom" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" data-nb-copy="nbCustom">📋 Copy</button></div>
+        </div>
+        <div class="url-status" id="nbStatus"></div>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>
