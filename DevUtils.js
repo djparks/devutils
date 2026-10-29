@@ -3,7 +3,7 @@ const TOOLS = [
   ['🕘','Unix Time Converter'],
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
-  ['&','URL Parser'], ['#;','HTML Entity Encode/Decode'], ['\\n','Backslash Escape/Unescape'],
+  ['#;','HTML Entity Encode/Decode'],
   ['±','Text Diff Checker'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter']
 ];
@@ -36,6 +36,7 @@ function selectTool(name) {
   const unixToolEl = document.getElementById('unixTool');
   const jwtToolEl = document.getElementById('jwtTool');
   const urlToolEl = document.getElementById('urlTool');
+  const b64ToolEl = document.getElementById('b64Tool');
   const yamlToolEl = document.getElementById('yamlTool');
   const propToolEl = document.getElementById('propTool');
   const otherToolEl = document.getElementById('otherTool');
@@ -43,6 +44,7 @@ function selectTool(name) {
   unixToolEl.style.display = 'none';
   jwtToolEl.style.display = 'none';
   urlToolEl.style.display = 'none';
+  b64ToolEl.style.display = 'none';
   yamlToolEl.style.display = 'none';
   propToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
@@ -56,6 +58,9 @@ function selectTool(name) {
   } else if (name === 'URL Encode/Decode') {
     urlToolEl.style.display = 'flex';
     runUrl();
+  } else if (name === 'Base64 String Encode/Decode') {
+    b64ToolEl.style.display = 'flex';
+    runB64();
   } else if (name === 'YAML to JSON' || name === 'JSON to YAML') {
     yamlToolEl.style.display = 'flex';
     yamlDirectionSel.value = name === 'YAML to JSON' ? 'y2j' : 'j2y';
@@ -514,6 +519,46 @@ document.getElementById('urlUseAsInput').onclick = () => {
   urlInput.value = urlOutput.value;
   document.querySelector('input[name="urlDir"]:not(:checked)').checked = true;
   runUrl();
+};
+
+/* ---------------- Base64 Encode/Decode ---------------- */
+const b64Input = document.getElementById('b64Input');
+const b64Output = document.getElementById('b64Output');
+const b64Status = document.getElementById('b64Status');
+const b64Dir = () => document.querySelector('input[name="b64Dir"]:checked').value;
+
+const B64_SAMPLE = '{"store":{"book":[{"category":"reference", "sold": false,"author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99},{"category":"fiction","author":"J. R. R. Tolkien","title":"The Lord of the Rings","act": null,"isbn":"0-395-19395-8","price":22.99}],"bicycle":{"color":"red","price":19.95}}}';
+
+function runB64() {
+  b64Input.classList.remove('err');
+  b64Status.className = 'url-status';
+  b64Status.textContent = '';
+  try {
+    if (b64Dir() === 'encode') {
+      b64Output.value = btoa(unescape(encodeURIComponent(b64Input.value)));
+    } else {
+      b64Output.value = decodeURIComponent(escape(atob(b64Input.value.replace(/\s/g, ''))));
+    }
+  } catch (e) {
+    b64Output.value = '';
+    b64Input.classList.add('err');
+    b64Status.className = 'url-status bad';
+    b64Status.textContent = 'Invalid Base64 input (' + e.message + ')';
+  }
+}
+
+b64Input.addEventListener('input', runB64);
+for (const r of document.querySelectorAll('input[name="b64Dir"]')) r.addEventListener('change', runB64);
+document.getElementById('b64Sample').onclick = () => {
+  b64Input.value = b64Dir() === 'decode' ? btoa(unescape(encodeURIComponent(B64_SAMPLE))) : B64_SAMPLE;
+  runB64();
+};
+document.getElementById('b64Clear').onclick = () => { b64Input.value = ''; runB64(); b64Input.focus(); };
+document.getElementById('b64Copy').onclick = e => copyText(b64Output.value, e.currentTarget);
+document.getElementById('b64UseAsInput').onclick = () => {
+  b64Input.value = b64Output.value;
+  document.querySelector('input[name="b64Dir"]:not(:checked)').checked = true;
+  runB64();
 };
 
 /* ---------------- YAML <-> JSON ---------------- */

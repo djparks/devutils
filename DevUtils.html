@@ -300,6 +300,31 @@
         </section>
       </div>
 
+      <!-- Base64 Encode/Decode Tool View -->
+      <div class="url-tool" id="b64Tool" style="display:none">
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Input:</span>
+            <button class="btn" id="b64Sample">Sample</button>
+            <button class="btn" id="b64Clear">Clear</button>
+            <span class="spacer"></span>
+            <label class="url-radio"><input type="radio" name="b64Dir" value="encode" checked> Encode</label>
+            <label class="url-radio"><input type="radio" name="b64Dir" value="decode"> Decode</label>
+          </div>
+          <textarea class="url-area" id="b64Input" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </section>
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Output:</span>
+            <span class="url-status" id="b64Status"></span>
+            <span class="spacer"></span>
+            <button class="btn" id="b64Copy">📋 Copy</button>
+            <button class="btn" id="b64UseAsInput">Use as input ⤴</button>
+          </div>
+          <textarea class="url-area" id="b64Output" readonly spellcheck="false"></textarea>
+        </section>
+      </div>
+
       <!-- YAML <-> JSON Tool View -->
       <div class="url-tool side-by-side" id="yamlTool" style="display:none">
         <section class="url-pane">
