@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevUtils — JWT Debugger</title>
+<style>
+  :root{
+    --win-bg:#f2efe9;
+    --sidebar-bg:#f2efe9;
+    --pane-bg:#f6f3ee;
+    --field-bg:#ffffff;
+    --border:#d9d4cb;
+    --border-strong:#c9c3b8;
+    --text:#1d1d1f;
+    --text-dim:#5c5952;
+    --accent:#2f7cf6;
+    --sel-text:#ffffff;
+    --btn-bg:#fbfaf8;
+    --btn-bg-active:#e8e4dc;
+    --green:#1fcc3f;
+    --mono:ui-monospace,"SF Mono",Menlo,Monaco,"Cascadia Mono",Consolas,monospace;
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    /* token colors */
+    --tok-head:#e0218a;
+    --tok-pay:#a742d6;
+    --tok-sig:#19b7e6;
+    --j-punct:#9b3fd4;
+    --j-key:#d0157f;
+    --j-str:#d0157f;
+    --j-num:#9b3fd4;
+    --sig-blue:#19b7e6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:#cfcac2;font-family:var(--ui);color:var(--text);
+    display:flex;align-items:center;justify-content:center;padding:16px;
+  }
+  .window{
+    width:min(1600px,100%);height:min(980px,calc(100vh - 32px));
+    background:var(--win-bg);border-radius:12px;overflow:hidden;
+    box-shadow:0 22px 60px rgba(0,0,0,.35),0 0 0 .5px rgba(0,0,0,.25);
+    display:flex;flex-direction:column;min-height:0;
+  }
+
+  /* ---------- title bar ---------- */
+  .titlebar{display:flex;align-items:center;height:46px;flex:none}
+  .tb-left{width:330px;flex:none;display:flex;align-items:center;padding:0 14px;height:100%}
+  .lights{display:flex;gap:8px}
+  .light{width:12px;height:12px;border-radius:50%}
+  .light.r{background:#ff5f57}.light.y{background:#febc2e}.light.g{background:#28c840}
+  .tb-right{flex:1;display:flex;align-items:center;gap:12px;padding:0 14px;height:100%}
+  .icon-btn{
+    border:0;background:transparent;color:#55524b;cursor:pointer;
+    padding:4px;border-radius:5px;display:grid;place-items:center;
+  }
+  .icon-btn:hover{background:rgba(0,0,0,.07)}
+  .tab-pill{
+    flex:1;max-width:620px;margin:0 auto;height:30px;border-radius:7px;
+    background:#e3dfd7;border:.5px solid var(--border-strong);
+    display:grid;place-items:center;font-size:13px;font-weight:500;
+  }
+
+  /* ---------- body ---------- */
+  .body{flex:1;display:flex;min-height:0}
+
+  /* sidebar */
+  .sidebar{
+    width:330px;flex:none;background:var(--sidebar-bg);
+    display:flex;flex-direction:column;min-height:0;padding:0 0 8px;
+  }
+  .search-wrap{padding:4px 12px 8px;display:flex;align-items:center;gap:8px}
+  .search{
+    flex:1;display:flex;align-items:center;gap:7px;height:28px;padding:0 9px;
+    background:#fff;border:.5px solid var(--border-strong);border-radius:7px;
+    box-shadow:0 1px 1px rgba(0,0,0,.04) inset;
+  }
+  .search input{border:0;outline:0;background:transparent;font:13px var(--ui);flex:1;color:var(--text)}
+  .search input::placeholder{color:#8d8980}
+  .nav{flex:1;overflow-y:auto;padding:0 10px;margin-top:2px}
+  .nav::-webkit-scrollbar{width:8px}
+  .nav::-webkit-scrollbar-thumb{background:#b9b4ab;border-radius:4px}
+  .nav-item{
+    display:flex;align-items:center;gap:12px;height:36px;padding:0 10px;
+    border-radius:7px;font-size:14px;color:var(--text);cursor:default;user-select:none;
+  }
+  .nav-item .ico{
+    width:22px;flex:none;text-align:center;font:600 12px var(--mono);color:#4a4740;
+  }
+  .nav-item.active{background:var(--accent);color:var(--sel-text)}
+  .nav-item.active .ico{color:#fff}
+  .nav-item:not(.active):hover{background:rgba(0,0,0,.05)}
+  .sidebar-foot{padding:8px 12px 0;text-align:center}
+  .feedback{
+    display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 14px;
+    background:var(--btn-bg);border:.5px solid var(--border-strong);border-radius:7px;
+    font-size:13px;cursor:pointer;box-shadow:0 1px 1px rgba(0,0,0,.05);
+  }
+  .version{margin-top:10px;text-align:center;font-size:13px;font-weight:600;color:#3a3833}
+
+  /* main */
+  .main{flex:1;background:var(--pane-bg);border-left:.5px solid var(--border);display:flex;min-width:0}
+  .center{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px 16px 16px}
+  .toolbar{display:flex;align-items:center;gap:10px;flex:none;flex-wrap:wrap}
+  .toolbar .label{font-size:14px;font-weight:600;margin-right:2px}
+  .btn{
+    height:30px;padding:0 14px;border-radius:7px;border:.5px solid var(--border-strong);
+    background:var(--btn-bg);font:13px var(--ui);color:var(--text);cursor:pointer;
+    box-shadow:0 1px 1px rgba(0,0,0,.05);display:inline-flex;align-items:center;gap:6px;
+  }
+  .btn:hover{background:#fff}
+  .btn:active{background:var(--btn-bg-active)}
+  .btn.icon{padding:0 9px}
+  .spacer{flex:1}
+  .select{
+    position:relative;height:30px;border-radius:7px;border:.5px solid var(--border-strong);
+    background:var(--btn-bg);box-shadow:0 1px 1px rgba(0,0,0,.05);display:flex;align-items:center;
+  }
+  .select select{
+    appearance:none;border:0;outline:0;background:transparent;font:13px var(--ui);
+    height:100%;padding:0 34px 0 12px;cursor:pointer;color:var(--text);
+  }
+  .select .chev{
+    position:absolute;right:3px;top:3px;bottom:3px;width:24px;border-radius:5px;
+    background:var(--accent);color:#fff;display:grid;place-items:center;pointer-events:none;font-size:9px;line-height:1.05;
+  }
+
+  /* editor */
+  .editor{
+    position:relative;flex:1;margin-top:12px;min-height:160px;
+    background:var(--field-bg);border:.5px solid var(--border-strong);border-radius:6px;
+    overflow:hidden;
+  }
+  .editor pre,.editor textarea{
+    margin:0;position:absolute;inset:0;padding:12px 14px;
+    font:15px/1.5 var(--mono);letter-spacing:.1px;
+    white-space:pre-wrap;word-break:break-all;overflow:auto;border:0;
+  }
+  .editor pre{pointer-events:none;color:transparent}
+  .editor textarea{background:transparent;color:transparent;caret-color:var(--text);outline:0;resize:none}
+  .editor textarea::selection{background:var(--accent);color:var(--sel-text)}
+  .t-h{color:var(--tok-head)} .t-p{color:var(--tok-pay)} .t-s{color:var(--tok-sig)} .t-d{color:#2b2b2b}
+
+  .verdict{
+    flex:none;margin-top:14px;height:56px;border-radius:7px;display:grid;place-items:center;
+    font-size:16px;font-weight:600;color:#06240c;background:var(--green);
+    border:.5px solid rgba(0,0,0,.12);
+  }
+  .verdict.bad{background:#ff4d4f;color:#fff}
+  .verdict.idle{background:#e3dfd7;color:var(--text-dim);font-weight:500}
+
+  /* right pane */
+  .right{
+    width:580px;flex:none;border-left:.5px solid var(--border);
+    display:flex;flex-direction:column;min-width:0;overflow-y:auto;
+  }
+  .sect{padding:14px 18px 16px;border-bottom:.5px solid var(--border)}
+  .sect:last-child{border-bottom:0}
+  .sect-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .sect-head h2{margin:0;font-size:15px;font-weight:600}
+  .json-box{
+    background:var(--field-bg);border:.5px solid var(--border-strong);border-radius:6px;
+    padding:10px 14px;min-height:150px;font:14px/1.6 var(--mono);
+    white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:260px;
+  }
+  .meta{margin-top:10px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500}
+  .warn-badge{
+    width:18px;height:18px;border-radius:4px;border:.5px solid var(--border-strong);
+    background:var(--btn-bg);display:grid;place-items:center;font:700 11px var(--ui);color:#b06a00;
+  }
+  .sig-code{font:14px/1.7 var(--mono);color:var(--sig-blue)}
+  .sig-code .ind{padding-left:22px}
+  .secret{
+    display:block;width:100%;margin:6px 0 6px 22px;max-width:calc(100% - 22px);
+    height:28px;padding:0 8px;border-radius:5px;border:.5px solid var(--border-strong);
+    background:#fff;font:14px var(--mono);color:var(--sig-blue);outline:0;
+  }
+  .secret:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,124,246,.25)}
+  .j-punct{color:var(--j-punct)} .j-key{color:var(--j-key)} .j-str{color:var(--j-str)}
+  .j-num{color:var(--j-num)} .j-bool{color:var(--j-num)} .j-err{color:#c0392b}
+
+  /* unix time tool */
+  .unix-tool{
+    flex:1;display:flex;flex-direction:column;padding:14px 20px 20px;
+    overflow-y:auto;min-width:0;
+  }
+  .unix-input-row{
+    display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;
+  }
+  .unix-input{
+    width:320px;height:30px;background:#fff;border:.5px solid var(--border-strong);
+    border-radius:7px;padding:0 10px;font:14px var(--mono);color:var(--text);outline:0;
+    box-shadow:0 1px 1px rgba(0,0,0,.04) inset;
+  }
+  .unix-input:focus{
+    border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,124,246,.25);
+  }
+  .unix-select{min-width:270px}
+  .unix-tips{margin-top:8px;font-size:13px;color:var(--text-dim)}
+  .unix-divider{border:0;border-bottom:.5px solid var(--border);margin:16px 0 18px}
+  .unix-grid{
+    display:grid;grid-template-columns:minmax(280px,340px) minmax(130px,160px) minmax(240px,300px);
+    gap:32px;align-items:start;
+  }
+  .unix-col{display:flex;flex-direction:column;gap:14px}
+  .unix-field-group{display:flex;flex-direction:column;gap:6px}
+  .unix-label{font-size:13px;font-weight:500;color:var(--text)}
+  .unix-field-row{display:flex;align-items:center;gap:8px}
+  .unix-out{
+    flex:1;height:30px;background:#fff;border:.5px solid var(--border-strong);
+    border-radius:6px;padding:0 10px;font:13px var(--mono);color:var(--text);outline:0;
+    min-width:0;box-shadow:0 1px 1px rgba(0,0,0,.04) inset;
+  }
+  .unix-out:focus{border-color:var(--accent)}
+  .btn-copy{
+    width:30px;height:30px;padding:0;flex:none;border-radius:6px;
+    border:.5px solid var(--border-strong);background:var(--btn-bg);
+    display:grid;place-items:center;cursor:pointer;box-shadow:0 1px 1px rgba(0,0,0,.05);
+    color:#4a4740;
+  }
+  .btn-copy:hover{background:#fff;color:var(--text)}
+  .btn-copy:active{background:var(--btn-bg-active)}
+  .jwt-tool{flex:1;display:flex;min-width:0}
+  .placeholder-tool{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--text-dim);font-size:15px;gap:8px;
+  }
+</style>
+</head>
+<body>
+<div class="window">
+
+  <div class="titlebar">
+    <div class="tb-left">
+      <div class="lights"><i class="light r"></i><i class="light y"></i><i class="light g"></i></div>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn" title="Toggle Sidebar" id="sidebarToggle">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="5" width="18" height="14" rx="2.5"/><line x1="9.5" y1="5" x2="9.5" y2="19"/>
+        </svg>
+      </button>
+      <div class="tab-pill" id="tabPill">Unix Time Converter</div>
+      <button class="icon-btn" title="Keep on top">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M14.5 2.5 21.5 9.5l-1.8 1.8-1.2-.4-4 4 .5 4.4-1.6 1.6-4.2-4.2-4.6 4.6-1.1-1.1 4.6-4.6L3.9 11.4l1.6-1.6 4.4.5 4-4-.4-1.2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="body">
+    <aside class="sidebar" id="sidebar">
+      <div class="search-wrap">
+        <div class="search">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8d8980" stroke-width="2.4">
+            <circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/>
+          </svg>
+          <input type="search" placeholder="Search… (⌘/)" id="navSearch">
+        </div>
+        <button class="icon-btn" title="Filter">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="12" cy="12" r="9"/><line x1="7" y1="9.5" x2="17" y2="9.5"/><line x1="9.5" y1="14.5" x2="14.5" y2="14.5"/>
+          </svg>
+        </button>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">
+        <div class="version">DJ's DevUtils</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- Unix Time Converter Tool View -->
+      <div class="unix-tool" id="unixTool">
+        <div class="toolbar">
+          <span class="label">Input:</span>
+          <button class="btn" id="btnNow">Now</button>
+          <button class="btn" id="btnClearUnix">Clear</button>
+        </div>
+
+        <div class="unix-input-row">
+          <input type="text" class="unix-input" id="unixInput" value="1657272324" spellcheck="false" autocomplete="off">
+          <div class="select unix-select">
+            <select id="unixFormatSelect">
+              <option value="s">Unix time (seconds since epoch)</option>
+              <option value="ms">Milliseconds since epoch</option>
+              <option value="iso">ISO 8601</option>
+              <option value="auto">Auto-detect</option>
+            </select>
+            <span class="chev">▲<br>▼</span>
+          </div>
+        </div>
+        <div class="unix-tips">Tips: Mathematical operators + - * / are supported</div>
+
+        <hr class="unix-divider">
+
+        <div class="unix-grid">
+          <!-- Column 1 -->
+          <div class="unix-col">
+            <div class="unix-field-group">
+              <span class="unix-label">Local:</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outLocal" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outLocal" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-group">
+              <span class="unix-label">UTC (ISO 8601):</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outUtc" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outUtc" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-group">
+              <span class="unix-label">Relative:</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outRelative" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outRelative" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-group">
+              <span class="unix-label">Unix time:</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outUnix" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outUnix" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2 -->
+          <div class="unix-col">
+            <div class="unix-field-group">
+              <span class="unix-label">Day of year</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outDayOfYear" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outDayOfYear" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-group">
+              <span class="unix-label">Week of year</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outWeekOfYear" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outWeekOfYear" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-group">
+              <span class="unix-label">Is leap year?</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outIsLeapYear" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outIsLeapYear" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3 -->
+          <div class="unix-col">
+            <div class="unix-field-group">
+              <span class="unix-label">Other formats (local)</span>
+              <div class="unix-field-row">
+                <input class="unix-out" id="outOther1" readonly spellcheck="false">
+                <button class="btn-copy" data-copy-target="outOther1" title="Copy">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther2" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther2" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther3" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther3" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther4" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther4" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther5" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther5" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther6" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther6" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther7" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther7" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+
+            <div class="unix-field-row">
+              <input class="unix-out" id="outOther8" readonly spellcheck="false">
+              <button class="btn-copy" data-copy-target="outOther8" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JWT Debugger Tool View -->
+      <div class="jwt-tool" id="jwtTool" style="display:none">
+        <section class="center">
+          <div class="toolbar">
+            <span class="label">Input:</span>
+            <button class="btn" id="btnSample">Sample</button>
+            <button class="btn" id="btnClear">Clear</button>
+            <span class="spacer"></span>
+            <div class="select">
+              <select id="alg">
+                <option>HS256</option><option>HS384</option><option>HS512</option>
+                <option>RS256</option><option>ES256</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <button class="btn" id="btnCopyToken">📋 Copy</button>
+          </div>
+
+          <div class="editor">
+            <pre id="highlight" aria-hidden="true"></pre>
+            <textarea id="token" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+          </div>
+
+          <div class="verdict idle" id="verdict">Enter a JWT above</div>
+        </section>
+
+        <aside class="right">
+          <div class="sect">
+            <div class="sect-head">
+              <h2>Header:</h2><span class="spacer"></span>
+              <button class="btn" data-copy="header">📋 Copy</button>
+            </div>
+            <div class="json-box" id="headerBox"></div>
+          </div>
+
+          <div class="sect">
+            <div class="sect-head">
+              <h2>Payload:</h2><span class="spacer"></span>
+              <button class="btn" data-copy="payload">📋 Copy</button>
+            </div>
+            <div class="json-box" id="payloadBox"></div>
+            <div class="meta" id="claimsMeta"></div>
+          </div>
+
+          <div class="sect">
+            <div class="sect-head">
+              <h2>Signature:</h2>
+              <span class="warn-badge" id="sigWarn" title="The secret is never sent anywhere">!</span>
+            </div>
+            <div class="sig-code" id="sigCode">
+              <div><span id="sigFn">HMACSHA256</span>(</div>
+              <div class="ind">base64UrlEncode(header) + "." +</div>
+              <div class="ind">base64UrlEncode(payload),</div>
+              <input class="secret" id="secret" spellcheck="false" value="your-secret">
+              <div>)</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Placeholder Tool View -->
+      <div class="placeholder-tool" id="otherTool" style="display:none">
+        <h3 id="otherToolName">Tool</h3>
+        <p>Tool not implemented in this demo</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+/* ---------------- sidebar ---------------- */
+const TOOLS = [
+  ['🕘','Unix Time Converter'], ['{,}','JSON Format/Validate'],
+  ['64','Base64 String Encode/Decode'], ['🖼','Base64 Image Encode/Decode'],
+  ['✳️','JWT Debugger'], ['.*','RegExp Tester'], ['%','URL Encode/Decode'],
+  ['&','URL Parser'], ['#;','HTML Entity Encode/Decode'], ['\\n','Backslash Escape/Unescape'],
+  ['ID','UUID/ULID Generate/Decode'], ['</>','HTML Preview'], ['±','Text Diff Checker'],
+  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['01','Number Base Converter']
+];
+
+let currentTool = 'Unix Time Converter';
+const nav = document.getElementById('nav');
+const tabPill = document.getElementById('tabPill');
+
+function renderNav(filter = '') {
+  const q = filter.trim().toLowerCase();
+  nav.innerHTML = '';
+  for (const [ico, name] of TOOLS) {
+    if (q && !name.toLowerCase().includes(q)) continue;
+    const el = document.createElement('div');
+    el.className = 'nav-item' + (name === currentTool ? ' active' : '');
+    el.innerHTML = `<span class="ico"></span><span class="nm"></span>`;
+    el.querySelector('.ico').textContent = ico;
+    el.querySelector('.nm').textContent = name;
+    el.onclick = () => selectTool(name);
+    nav.appendChild(el);
+  }
+}
+
+function selectTool(name) {
+  currentTool = name;
+  tabPill.textContent = name;
+  document.title = 'DevUtils — ' + name;
+  renderNav(document.getElementById('navSearch').value);
+
+  const unixToolEl = document.getElementById('unixTool');
+  const jwtToolEl = document.getElementById('jwtTool');
+  const otherToolEl = document.getElementById('otherTool');
+
+  if (name === 'Unix Time Converter') {
+    unixToolEl.style.display = 'flex';
+    jwtToolEl.style.display = 'none';
+    otherToolEl.style.display = 'none';
+    updateUnixTime();
+  } else if (name === 'JWT Debugger') {
+    unixToolEl.style.display = 'none';
+    jwtToolEl.style.display = 'flex';
+    otherToolEl.style.display = 'none';
+    runJwt();
+  } else {
+    unixToolEl.style.display = 'none';
+    jwtToolEl.style.display = 'none';
+    otherToolEl.style.display = 'flex';
+    document.getElementById('otherToolName').textContent = name;
+  }
+}
+
+renderNav();
+document.getElementById('navSearch').addEventListener('input', e => renderNav(e.target.value));
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+  const s = document.getElementById('sidebar');
+  s.style.display = s.style.display === 'none' ? '' : 'none';
+});
+
+/* ---------------- helpers ---------------- */
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); } catch { return; }
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span style="color:var(--green);font-size:12px;font-weight:600">✓</span>';
+  setTimeout(() => btn.innerHTML = orig, 1000);
+}
+
+document.querySelectorAll('.btn-copy').forEach(btn => {
+  btn.onclick = () => {
+    const targetId = btn.dataset.copyTarget;
+    const input = document.getElementById(targetId);
+    if (input) copyText(input.value, btn);
+  };
+});
+
+/* ---------------- Unix Time Converter ---------------- */
+const unixInput = document.getElementById('unixInput');
+const unixFormatSelect = document.getElementById('unixFormatSelect');
+const btnNow = document.getElementById('btnNow');
+const btnClearUnix = document.getElementById('btnClearUnix');
+
+const outLocal = document.getElementById('outLocal');
+const outUtc = document.getElementById('outUtc');
+const outRelative = document.getElementById('outRelative');
+const outUnix = document.getElementById('outUnix');
+const outDayOfYear = document.getElementById('outDayOfYear');
+const outWeekOfYear = document.getElementById('outWeekOfYear');
+const outIsLeapYear = document.getElementById('outIsLeapYear');
+const outOther1 = document.getElementById('outOther1');
+const outOther2 = document.getElementById('outOther2');
+const outOther3 = document.getElementById('outOther3');
+const outOther4 = document.getElementById('outOther4');
+const outOther5 = document.getElementById('outOther5');
+const outOther6 = document.getElementById('outOther6');
+const outOther7 = document.getElementById('outOther7');
+const outOther8 = document.getElementById('outOther8');
+
+function getISOWeek(date) {
+  const target = new Date(date.valueOf());
+  const dayNr = (date.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  return 1 + Math.ceil((firstThursday - target) / 604800000);
+}
+
+function formatRelativeTime(date) {
+  const diffSec = Math.round((Date.now() - date.getTime()) / 1000);
+  if (Math.abs(diffSec) < 5) return 'just now';
+  if (diffSec > 0) {
+    if (diffSec < 60) return `${diffSec}sec ago`;
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}min ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}hour ago`;
+    if (diffSec < 30 * 86400) return `${Math.floor(diffSec / 86400)}days ago`;
+    if (diffSec < 365 * 86400) return `${Math.floor(diffSec / (30 * 86400))}months ago`;
+    const yrs = Math.floor(diffSec / (365 * 86400));
+    return `${yrs}year${yrs > 1 ? 's' : ''} ago`;
+  } else {
+    const sec = Math.abs(diffSec);
+    if (sec < 60) return `in ${sec}sec`;
+    if (sec < 3600) return `in ${Math.floor(sec / 60)}min`;
+    if (sec < 86400) return `in ${Math.floor(sec / 3600)}hour`;
+    if (sec < 30 * 86400) return `in ${Math.floor(sec / 86400)}days`;
+    if (sec < 365 * 86400) return `in ${Math.floor(sec / (30 * 86400))}months`;
+    const yrs = Math.floor(sec / (365 * 86400));
+    return `in ${yrs}year${yrs > 1 ? 's' : ''}`;
+  }
+}
+
+function parseDateInput(raw, formatMode) {
+  if (!raw || !raw.trim()) return null;
+  const str = raw.trim();
+
+  // 1. ISO format with T or Z / timezone
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/i.test(str)) {
+    const t = Date.parse(str);
+    if (!isNaN(t)) return new Date(t);
+  }
+
+  // 2. YYYY/MM/DD or YYYY-MM-DD or YYYY.MM.DD with optional time
+  const ymdMatch = str.match(/^(\d{4})[\/\-. ](\d{1,2})[\/\-. ](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (ymdMatch) {
+    const [_, y, m, d, h, min, s] = ymdMatch;
+    const date = new Date(+y, +m - 1, +d, h ? +h : 0, min ? +min : 0, s ? +s : 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 3. MM/DD/YYYY with optional time
+  const mdyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (mdyMatch) {
+    const [_, m, d, y, h, min, s] = mdyMatch;
+    const date = new Date(+y, +m - 1, +d, h ? +h : 0, min ? +min : 0, s ? +s : 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 4. DD-MM-YYYY or DD.MM.YYYY with optional time
+  const dmyMatch = str.match(/^(\d{1,2})[\-.](\d{1,2})[\-.](\d{4})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (dmyMatch) {
+    const [_, d, m, y, h, min, s] = dmyMatch;
+    const date = new Date(+y, +m - 1, +d, h ? +h : 0, min ? +min : 0, s ? +s : 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 5. Text date with month names
+  if (/[a-zA-Z]/.test(str) && !/\bnow\b/i.test(str)) {
+    const t = Date.parse(str);
+    if (!isNaN(t)) return new Date(t);
+  }
+
+  // 6. Number or Math expression (+ - * /)
+  let mathStr = str.replace(/\bnow\b/gi, Math.floor(Date.now() / 1000));
+  if (/^[\d\s+\-*/.()]+$/.test(mathStr)) {
+    try {
+      const num = Function('"use strict"; return (' + mathStr + ')')();
+      if (typeof num === 'number' && !isNaN(num) && isFinite(num)) {
+        if (formatMode === 'ms') {
+          return new Date(num);
+        } else if (formatMode === 's' && num < 1e11) {
+          return new Date(num * 1000);
+        } else {
+          // Auto detect
+          if (num > 1e16) return new Date(Math.floor(num / 1e6));
+          if (num > 1e13) return new Date(Math.floor(num / 1e3));
+          if (num > 3e10) return new Date(num);
+          return new Date(num * 1000);
+        }
+      }
+    } catch (e) {}
+  }
+
+  const fallback = Date.parse(str);
+  if (!isNaN(fallback)) return new Date(fallback);
+
+  return null;
+}
+
+function clearUnixOutputs() {
+  outLocal.value = '';
+  outUtc.value = '';
+  outRelative.value = '';
+  outUnix.value = '';
+  outDayOfYear.value = '';
+  outWeekOfYear.value = '';
+  outIsLeapYear.value = '';
+  outOther1.value = '';
+  outOther2.value = '';
+  outOther3.value = '';
+  outOther4.value = '';
+  outOther5.value = '';
+  outOther6.value = '';
+  outOther7.value = '';
+  outOther8.value = '';
+}
+
+function updateUnixTime() {
+  const raw = unixInput.value;
+  if (!raw || !raw.trim()) {
+    clearUnixOutputs();
+    return;
+  }
+
+  const d = parseDateInput(raw, unixFormatSelect.value);
+  if (!d || isNaN(d.getTime())) {
+    clearUnixOutputs();
+    outLocal.value = 'Invalid Date';
+    return;
+  }
+
+  // Local
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  const tz = sign + pad(Math.floor(Math.abs(off)/60)) + pad(Math.abs(off)%60);
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  outLocal.value = `${DAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${pad(d.getDate())} ${time} ${tz} ${d.getFullYear()}`;
+
+  // UTC
+  outUtc.value = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
+
+  // Relative
+  outRelative.value = formatRelativeTime(d);
+
+  // Unix time
+  outUnix.value = Math.floor(d.getTime() / 1000);
+
+  // Day of year
+  const start = new Date(d.getFullYear(), 0, 1);
+  const diff = d - start + (start.getTimezoneOffset() - d.getTimezoneOffset()) * 60000;
+  outDayOfYear.value = Math.floor(diff / 86400000) + 1;
+
+  // Week of year
+  outWeekOfYear.value = getISOWeek(d);
+
+  // Is leap year?
+  const y = d.getFullYear();
+  const isLeap = (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+  outIsLeapYear.value = isLeap ? 'true' : 'false';
+
+  // Other formats (local)
+  outOther1.value = `${DAYS_FULL[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  outOther2.value = `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+  outOther3.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  outOther4.value = `${pad(d.getMonth()+1)}-${pad(d.getDate())}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  let h12 = d.getHours() % 12;
+  if (!h12) h12 = 12;
+  const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+  outOther5.value = `${MONTHS[d.getMonth()]} ${d.getDate()}, ${h12}:${pad(d.getMinutes())} ${ampm}`;
+
+  outOther6.value = `${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
+  outOther7.value = `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  outOther8.value = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+}
+
+unixInput.addEventListener('input', updateUnixTime);
+unixFormatSelect.addEventListener('change', updateUnixTime);
+btnNow.onclick = () => {
+  unixInput.value = Math.floor(Date.now() / 1000);
+  updateUnixTime();
+  unixInput.focus();
+};
+btnClearUnix.onclick = () => {
+  unixInput.value = '';
+  updateUnixTime();
+  unixInput.focus();
+};
+
+/* ---------------- JWT Debugger ---------------- */
+function b64urlToBytes(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+const b64urlToText = s => new TextDecoder().decode(b64urlToBytes(s));
+const bytesToB64url = bytes =>
+  btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+function highlightJSON(text) {
+  return esc(text).replace(
+    /("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b|\b(true|false|null)\b|([{}\[\],:])/g,
+    (m, str, colon, num, lit, punct) => {
+      if (str) return colon
+        ? `<span class="j-key">${str}</span><span class="j-punct">${colon}</span>`
+        : `<span class="j-str">${str}</span>`;
+      if (num) return `<span class="j-num">${num}</span>`;
+      if (lit) return `<span class="j-bool">${lit}</span>`;
+      return `<span class="j-punct">${punct}</span>`;
+    });
+}
+
+const ta = document.getElementById('token');
+const hl = document.getElementById('highlight');
+const verdict = document.getElementById('verdict');
+const headerBox = document.getElementById('headerBox');
+const payloadBox = document.getElementById('payloadBox');
+const claimsMeta = document.getElementById('claimsMeta');
+const algSel = document.getElementById('alg');
+const secretInput = document.getElementById('secret');
+
+function paintToken(v) {
+  const parts = v.split('.');
+  const cls = ['t-h', 't-p', 't-s'];
+  let html = '';
+  parts.forEach((p, i) => {
+    if (i) html += `<span class="t-d">.</span>`;
+    html += `<span class="${cls[i] || 't-d'}">${esc(p)}</span>`;
+  });
+  hl.innerHTML = html + '\n';
+  hl.scrollTop = ta.scrollTop;
+}
+
+function prettyOrRaw(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+}
+
+function fmtTime(sec) {
+  const d = new Date(sec * 1000);
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+         `${sign}${pad(Math.floor(Math.abs(off)/60))}:${pad(Math.abs(off)%60)}`;
+}
+
+function setVerdict(state, text) {
+  verdict.className = 'verdict' + (state === 'ok' ? '' : state === 'bad' ? ' bad' : ' idle');
+  verdict.textContent = text;
+}
+
+let decoded = { header: null, payload: null };
+
+async function runJwt() {
+  const raw = ta.value.trim();
+  paintToken(ta.value);
+
+  if (!raw) {
+    headerBox.innerHTML = ''; payloadBox.innerHTML = ''; claimsMeta.textContent = '';
+    decoded = { header: null, payload: null };
+    setVerdict('idle', 'Enter a JWT above');
+    return;
+  }
+
+  const parts = raw.split('.');
+  let headerText = '', payloadText = '', headerObj = null, payloadObj = null;
+
+  try { headerText = prettyOrRaw(b64urlToText(parts[0] || '')); headerObj = JSON.parse(headerText); }
+  catch { headerText = ''; }
+  try { payloadText = prettyOrRaw(b64urlToText(parts[1] || '')); payloadObj = JSON.parse(payloadText); }
+  catch { payloadText = ''; }
+
+  headerBox.innerHTML = headerText
+    ? highlightJSON(headerText) : '<span class="j-err">Invalid header segment</span>';
+  payloadBox.innerHTML = payloadText
+    ? highlightJSON(payloadText) : '<span class="j-err">Invalid payload segment</span>';
+  decoded = { header: headerText, payload: payloadText };
+
+  // claim timestamps
+  const bits = [];
+  if (payloadObj) {
+    if (typeof payloadObj.iat === 'number') bits.push('Issued At: ' + fmtTime(payloadObj.iat));
+    if (typeof payloadObj.nbf === 'number') bits.push('Not Before: ' + fmtTime(payloadObj.nbf));
+    if (typeof payloadObj.exp === 'number') bits.push('Expires At: ' + fmtTime(payloadObj.exp));
+  }
+  claimsMeta.innerHTML = bits.length
+    ? bits.map(esc).join('<br>') + ' <span style="opacity:.55">👁</span>' : '';
+
+  // keep the alg picker in sync with the token header
+  if (headerObj && typeof headerObj.alg === 'string') {
+    const want = headerObj.alg.toUpperCase();
+    if ([...algSel.options].some(o => o.value === want || o.text === want)) algSel.value = want;
+  }
+  const alg = algSel.value;
+  document.getElementById('sigFn').textContent =
+    alg.startsWith('HS') ? 'HMACSHA' + alg.slice(2) : alg;
+
+  if (parts.length !== 3 || !parts[2]) { setVerdict('bad', '✕ Invalid JWT — expected three segments'); return; }
+  if (!alg.startsWith('HS')) { setVerdict('idle', `Signature check for ${alg} is not supported`); return; }
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(secretInput.value),
+      { name: 'HMAC', hash: 'SHA-' + alg.slice(2) }, false, ['sign']);
+    const mac = new Uint8Array(await crypto.subtle.sign(
+      'HMAC', key, new TextEncoder().encode(parts[0] + '.' + parts[1])));
+    const ok = bytesToB64url(mac) === parts[2];
+    setVerdict(ok ? 'ok' : 'bad', ok ? '✓ Signature Verified' : '✕ Invalid Signature');
+  } catch (e) {
+    setVerdict('bad', '✕ Could not verify: ' + e.message);
+  }
+}
+
+ta.addEventListener('input', runJwt);
+ta.addEventListener('scroll', () => { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; });
+secretInput.addEventListener('input', runJwt);
+algSel.addEventListener('change', runJwt);
+
+/* ---------------- JWT toolbar actions ---------------- */
+const SAMPLE = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.vqb33-7FqzFWPNlr0ElW1v2RjJRZBel3CdDHBWD7y_o';
+
+document.getElementById('btnSample').onclick = () => { ta.value = SAMPLE; secretInput.value = 'your-secret'; runJwt(); };
+document.getElementById('btnClear').onclick = () => { ta.value = ''; runJwt(); ta.focus(); };
+document.getElementById('btnCopyToken').onclick = e => copyText(ta.value, e.currentTarget);
+for (const b of document.querySelectorAll('[data-copy]'))
+  b.onclick = e => copyText(decoded[b.dataset.copy] || '', e.currentTarget);
+
+/* boot with Unix Time Converter */
+selectTool('Unix Time Converter');
+ta.value = SAMPLE;
+</script>
+</body>
+</html>
