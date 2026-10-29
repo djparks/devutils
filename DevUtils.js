@@ -4,7 +4,8 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['±','Text Diff Checker'],
-  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter']
+  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
+  ['📅','Date Calculator']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -39,6 +40,7 @@ function selectTool(name) {
   const yamlToolEl = document.getElementById('yamlTool');
   const propToolEl = document.getElementById('propTool');
   const nbToolEl = document.getElementById('nbTool');
+  const dcToolEl = document.getElementById('dcTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -48,6 +50,7 @@ function selectTool(name) {
   yamlToolEl.style.display = 'none';
   propToolEl.style.display = 'none';
   nbToolEl.style.display = 'none';
+  dcToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -72,6 +75,9 @@ function selectTool(name) {
     runProp();
   } else if (name === 'Number Base Converter') {
     nbToolEl.style.display = 'flex';
+  } else if (name === 'Date Calculator') {
+    dcToolEl.style.display = 'flex';
+    runDc();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -1365,6 +1371,138 @@ document.querySelectorAll('#nbTool [data-nb-clear]').forEach(btn => {
 });
 document.querySelectorAll('#nbTool [data-nb-copy]').forEach(btn => {
   btn.onclick = e => copyText(document.getElementById(btn.dataset.nbCopy).value, e.currentTarget);
+});
+
+/* ---------------- Date Calculator ---------------- */
+const DC_DAY_MS = 86400000;
+const dcEl = id => document.getElementById(id);
+const dcStartEl = dcEl('dcStart'), dcEndEl = dcEl('dcEnd'), dcBaseEl = dcEl('dcBase');
+const dcIncludeEl = dcEl('dcInclude');
+
+// All dates are UTC midnight so DST never changes day counts
+function dcMake(y, m, d) {
+  const t = new Date(0);
+  t.setUTCFullYear(y, m, d);
+  return t;
+}
+function dcParse(v) {
+  const m = /^(\d{4,6})-(\d{2})-(\d{2})$/.exec(v || '');
+  return m ? dcMake(+m[1], +m[2] - 1, +m[3]) : null;
+}
+function dcIso(t) {
+  return String(t.getUTCFullYear()).padStart(4, '0') + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
+}
+function dcToday() {
+  const n = new Date();
+  return dcMake(n.getFullYear(), n.getMonth(), n.getDate());
+}
+function dcDim(y, m) {
+  if (m === 1) return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28;
+  return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m];
+}
+// Adds calendar months, clamping the day (Jan 31 + 1 month = Feb 28/29)
+function dcAddMonths(t, n) {
+  const total = t.getUTCFullYear() * 12 + t.getUTCMonth() + n;
+  const y = Math.floor(total / 12), m = total - y * 12;
+  return dcMake(y, m, Math.min(t.getUTCDate(), dcDim(y, m)));
+}
+const dcAddDays = (t, n) => new Date(t.getTime() + n * DC_DAY_MS);
+const dcDiffDays = (a, b) => Math.round((b - a) / DC_DAY_MS);
+
+// Calendar difference a <= b as years / months / days
+function dcBreakdown(a, b) {
+  let months = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + b.getUTCMonth() - a.getUTCMonth();
+  if (dcAddMonths(a, months) > b) months--;
+  return { years: Math.floor(months / 12), months: months % 12, days: dcDiffDays(dcAddMonths(a, months), b) };
+}
+// Number of Monday-Friday days among n consecutive days beginning at t
+function dcWeekdays(t, n) {
+  let count = Math.floor(n / 7) * 5;
+  for (let i = 0; i < n % 7; i++) {
+    const d = (t.getUTCDay() + i) % 7;
+    if (d !== 0 && d !== 6) count++;
+  }
+  return count;
+}
+
+const dcPlural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+const dcFmtLong = t => t.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+const dcFmtShort = t => t.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+function dcShow(el, big, lines, bad) {
+  el.className = 'dc-result' + (bad ? ' bad' : '');
+  el.innerHTML = '<div class="dc-big">' + esc(big) + '</div>' +
+    (lines || []).map(l => '<div class="dc-line">' + esc(l) + '</div>').join('');
+}
+
+function dcRunBetween() {
+  const out = dcEl('dcBetweenResult');
+  let a = dcParse(dcStartEl.value), b = dcParse(dcEndEl.value);
+  if (!a || !b) return dcShow(out, 'Enter a valid start and end date', null, true);
+  let reversed = false;
+  if (b < a) { [a, b] = [b, a]; reversed = true; }
+  const include = dcIncludeEl.checked;
+  const days = dcDiffDays(a, b) + (include ? 1 : 0);
+  const span = dcBreakdown(a, include ? dcAddDays(b, 1) : b);
+  const parts = [];
+  if (span.years) parts.push(dcPlural(span.years, 'year'));
+  if (span.months) parts.push(dcPlural(span.months, 'month'));
+  if (span.days || !parts.length) parts.push(dcPlural(span.days, 'day'));
+  const wk = Math.floor(days / 7), rd = days % 7;
+  const weekdays = dcWeekdays(a, days);
+  const lines = [
+    parts.join(', '),
+    (wk ? dcPlural(wk, 'week') + ', ' : '') + dcPlural(rd, 'day'),
+    dcPlural(weekdays, 'weekday') + ' (Mon\u2013Fri), ' + dcPlural(days - weekdays, 'weekend day'),
+    dcPlural(days * 24, 'hour')
+  ];
+  if (reversed) lines.unshift('The end date is before the start date; showing the absolute difference.');
+  dcShow(out, dcPlural(days, 'day'), lines, false);
+}
+
+function dcRunAdd() {
+  const out = dcEl('dcAddResult');
+  const base = dcParse(dcBaseEl.value);
+  if (!base) return dcShow(out, 'Enter a valid start date', null, true);
+  const num = id => {
+    const v = dcEl(id).value.trim();
+    return v === '' ? 0 : Number(v);
+  };
+  const y = num('dcYears'), mo = num('dcMonths'), w = num('dcWeeks'), d = num('dcDays');
+  if (![y, mo, w, d].every(Number.isInteger)) return dcShow(out, 'Years, months, weeks and days must be whole numbers', null, true);
+  const sign = document.querySelector('input[name=dcOp]:checked').value === 'sub' ? -1 : 1;
+  const res = dcAddDays(dcAddMonths(base, sign * (y * 12 + mo)), sign * (w * 7 + d));
+  if (isNaN(res) || Math.abs(res.getUTCFullYear()) > 275000) return dcShow(out, 'Result is out of the supported date range', null, true);
+  const items = [];
+  if (y) items.push(dcPlural(y, 'year'));
+  if (mo) items.push(dcPlural(mo, 'month'));
+  if (w) items.push(dcPlural(w, 'week'));
+  if (d) items.push(dcPlural(d, 'day'));
+  const desc = dcFmtShort(base) + (sign < 0 ? ' \u2212 ' : ' + ') + (items.join(', ') || '0 days');
+  const diff = Math.abs(dcDiffDays(base, res));
+  dcShow(out, dcFmtLong(res), [desc, dcPlural(diff, 'day') + (sign < 0 ? ' before' : ' after') + ' the start date'], false);
+}
+
+function runDc() {
+  dcRunBetween();
+  dcRunAdd();
+}
+
+{
+  const today = dcIso(dcToday());
+  dcStartEl.value = dcEndEl.value = dcBaseEl.value = today;
+}
+dcEl('dcTool').addEventListener('input', runDc);
+dcEl('dcTool').addEventListener('change', runDc);
+dcEl('dcSwap').onclick = () => {
+  [dcStartEl.value, dcEndEl.value] = [dcEndEl.value, dcStartEl.value];
+  runDc();
+};
+document.querySelectorAll('#dcTool [data-dc-today]').forEach(btn => {
+  btn.onclick = () => {
+    dcEl(btn.dataset.dcToday).value = dcIso(dcToday());
+    runDc();
+  };
 });
 
 /* boot with Unix Time Converter */

@@ -452,6 +452,48 @@
         <div class="url-status" id="nbStatus"></div>
       </div>
 
+      <!-- Date Calculator Tool View -->
+      <div class="url-tool nb-tool dc-tool" id="dcTool" style="display:none">
+        <p class="nb-intro">Calculate the number of days between two dates, or add or subtract years, months, weeks and days from a date.</p>
+        <div class="dc-cards">
+          <section class="dc-card">
+            <h3 class="dc-title">Days between two dates</h3>
+            <div class="dc-grid">
+              <label class="nb-label" for="dcStart">Start date</label>
+              <div class="dc-datefield"><input type="date" class="nb-input" id="dcStart"><button class="btn nb-mini" data-dc-today="dcStart">Today</button></div>
+              <label class="nb-label" for="dcEnd">End date</label>
+              <div class="dc-datefield"><input type="date" class="nb-input" id="dcEnd"><button class="btn nb-mini" data-dc-today="dcEnd">Today</button></div>
+            </div>
+            <div class="dc-opts">
+              <label class="url-radio"><input type="checkbox" id="dcInclude"> Include end date (adds 1 day)</label>
+              <button class="btn nb-mini" id="dcSwap">⇅ Swap dates</button>
+            </div>
+            <div class="dc-result" id="dcBetweenResult"></div>
+          </section>
+          <section class="dc-card">
+            <h3 class="dc-title">Add or subtract from a date</h3>
+            <div class="dc-grid">
+              <label class="nb-label" for="dcBase">Start date</label>
+              <div class="dc-datefield"><input type="date" class="nb-input" id="dcBase"><button class="btn nb-mini" data-dc-today="dcBase">Today</button></div>
+              <span class="nb-label">Operation</span>
+              <div class="dc-datefield">
+                <label class="url-radio"><input type="radio" name="dcOp" value="add" checked> Add</label>
+                <label class="url-radio"><input type="radio" name="dcOp" value="sub"> Subtract</label>
+              </div>
+              <label class="nb-label" for="dcYears">Years</label>
+              <input type="number" class="nb-input dc-num" id="dcYears" step="1" value="0">
+              <label class="nb-label" for="dcMonths">Months</label>
+              <input type="number" class="nb-input dc-num" id="dcMonths" step="1" value="0">
+              <label class="nb-label" for="dcWeeks">Weeks</label>
+              <input type="number" class="nb-input dc-num" id="dcWeeks" step="1" value="0">
+              <label class="nb-label" for="dcDays">Days</label>
+              <input type="number" class="nb-input dc-num" id="dcDays" step="1" value="30">
+            </div>
+            <div class="dc-result" id="dcAddResult"></div>
+          </section>
+        </div>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

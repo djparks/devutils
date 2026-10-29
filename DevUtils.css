@@ -308,6 +308,26 @@
   .nb-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(99,102,241,0.2)}
   .nb-input.err{border-color:var(--red)}
 
+  /* date calculator */
+  .dc-cards{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}
+  .dc-card{
+    flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:14px;padding:16px;
+    background:var(--panel-bg);border:1px solid var(--border);border-radius:10px;
+  }
+  .dc-title{margin:0;font-size:15px;font-weight:600;color:var(--text)}
+  .dc-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px 12px;align-items:center}
+  .dc-datefield{display:flex;align-items:center;gap:10px;min-width:0}
+  .dc-opts{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .dc-tool input[type=date]{color-scheme:dark}
+  .dc-num{width:100%}
+  .dc-result{
+    margin-top:auto;padding:12px 14px;border-radius:8px;min-height:64px;
+    background:var(--field-bg);border:1px solid var(--border);
+  }
+  .dc-big{font-size:18px;font-weight:600;color:var(--text)}
+  .dc-line{font-size:13px;color:var(--text-dim);margin-top:4px}
+  .dc-result.bad .dc-big{color:#f87171;font-size:14px}
+
   /* yaml <-> json tool */
   .url-tool.side-by-side{flex-direction:row}
   .url-tool.side-by-side .url-pane{flex:1 1 0;min-width:0}
