@@ -1456,6 +1456,8 @@ function dcRunBetween() {
     dcPlural(weekdays, 'weekday') + ' (Mon\u2013Fri), ' + dcPlural(days - weekdays, 'weekend day'),
     dcPlural(days * 24, 'hour')
   ];
+  const mid = dcAddDays(a, Math.floor(dcDiffDays(a, b) / 2));
+  lines.push('Midpoint: ' + dcFmtLong(mid));
   if (reversed) lines.unshift('The end date is before the start date; showing the absolute difference.');
   dcShow(out, dcPlural(days, 'day'), lines, false);
 }
