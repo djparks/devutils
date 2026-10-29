@@ -494,6 +494,28 @@
         </div>
       </div>
 
+      <!-- Hash Generator Tool View -->
+      <div class="url-tool side-by-side hg-tool" id="hgTool" style="display:none">
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Input:</span>
+            <button class="btn" id="hgSample">Sample</button>
+            <button class="btn" id="hgLoad">Load file...</button>
+            <button class="btn" id="hgClear">Clear</button>
+            <input type="file" id="hgFile" style="display:none">
+          </div>
+          <textarea class="url-area" id="hgInput" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </section>
+        <section class="url-pane hg-out">
+          <div class="toolbar">
+            <span class="hg-info" id="hgInfo"></span>
+            <span class="spacer"></span>
+            <label class="url-radio"><input type="checkbox" id="hgLower"> lowercased</label>
+          </div>
+          <div class="hg-rows" id="hgRows"></div>
+        </section>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

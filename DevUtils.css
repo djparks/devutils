@@ -308,6 +308,14 @@
   .nb-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(99,102,241,0.2)}
   .nb-input.err{border-color:var(--red)}
 
+  /* hash generator */
+  .hg-tool .hg-out{flex:1.4 1 0}
+  .hg-tool .hg-out .toolbar{margin-bottom:10px}
+  .hg-info{font-size:14px;color:var(--text)}
+  .hg-rows{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
+  .hg-row{display:flex;flex-direction:column;gap:6px;flex:none}
+  .hg-input{flex:1;min-width:0;height:34px;font-size:13px}
+
   /* date calculator */
   .dc-cards{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}
   .dc-card{

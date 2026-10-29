@@ -3,9 +3,8 @@ const TOOLS = [
   ['🕘','Unix Time Converter'],
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
-  ['±','Text Diff Checker'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
-  ['📅','Date Calculator']
+  ['📅','Date Calculator'], ['#','Hash Generator']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -41,6 +40,7 @@ function selectTool(name) {
   const propToolEl = document.getElementById('propTool');
   const nbToolEl = document.getElementById('nbTool');
   const dcToolEl = document.getElementById('dcTool');
+  const hgToolEl = document.getElementById('hgTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -51,6 +51,7 @@ function selectTool(name) {
   propToolEl.style.display = 'none';
   nbToolEl.style.display = 'none';
   dcToolEl.style.display = 'none';
+  hgToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -78,6 +79,9 @@ function selectTool(name) {
   } else if (name === 'Date Calculator') {
     dcToolEl.style.display = 'flex';
     runDc();
+  } else if (name === 'Hash Generator') {
+    hgToolEl.style.display = 'flex';
+    runHg();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -1505,6 +1509,288 @@ document.querySelectorAll('#dcTool [data-dc-today]').forEach(btn => {
     dcEl(btn.dataset.dcToday).value = dcIso(dcToday());
     runDc();
   };
+});
+
+/* ---------------- Hash Generator ---------------- */
+/* HASH-ALGOS-BEGIN */
+const HASH_MD2_S = [41,46,67,201,162,216,124,1,61,54,84,161,236,240,6,19,98,167,5,243,192,199,115,140,152,147,43,217,188,76,130,202,30,155,87,60,253,212,224,22,103,66,111,24,138,23,229,18,190,78,196,214,218,158,222,73,160,251,245,142,187,47,238,122,169,104,121,145,21,178,7,63,148,194,16,137,11,34,95,33,128,127,93,154,90,144,50,39,53,62,204,231,191,247,151,3,255,25,48,179,72,165,181,209,215,94,146,42,172,86,170,198,79,184,56,210,150,164,125,182,118,252,107,226,156,116,4,241,69,157,112,89,100,113,135,32,134,91,207,101,230,45,168,2,27,96,37,173,174,176,185,246,28,70,97,105,52,64,126,15,85,71,163,35,221,81,175,58,195,92,249,206,186,197,234,38,44,83,13,110,133,40,132,9,211,223,205,244,65,129,77,82,106,220,55,200,108,193,171,250,36,225,123,8,12,189,177,74,120,136,149,139,227,99,232,109,233,203,213,254,59,0,29,57,242,239,183,14,102,88,208,228,166,119,114,248,235,117,75,10,49,68,80,180,143,237,31,26,219,153,141,51,159,17,131,20];
+
+const hashRol = (x, s) => (x << s) | (x >>> (32 - s));
+const hashRor = (x, s) => (x >>> s) | (x << (32 - s));
+
+// Appends 0x80, zero padding and the 64-bit bit-length (in a 'lenSize'-byte field) to a block multiple
+function hashPad(bytes, block, lenSize, little) {
+  const n = bytes.length;
+  const total = Math.ceil((n + 1 + lenSize) / block) * block;
+  const m = new Uint8Array(total);
+  m.set(bytes);
+  m[n] = 0x80;
+  const dv = new DataView(m.buffer);
+  const lo = (n * 8) >>> 0, hi = Math.floor(n / 0x20000000);
+  if (little) { dv.setUint32(total - 8, lo, true); dv.setUint32(total - 4, hi, true); }
+  else { dv.setUint32(total - 8, hi, false); dv.setUint32(total - 4, lo, false); }
+  return m;
+}
+
+function hashWordsOut(words, little) {
+  const out = new Uint8Array(words.length * 4);
+  const dv = new DataView(out.buffer);
+  words.forEach((w, i) => dv.setUint32(i * 4, w >>> 0, little));
+  return out;
+}
+
+function hashMd2(bytes) {
+  const S = HASH_MD2_S;
+  const n = bytes.length, padLen = 16 - (n % 16);
+  const m = new Uint8Array(n + padLen + 16);
+  m.set(bytes);
+  m.fill(padLen, n, n + padLen);
+  const C = new Uint8Array(16);
+  let L = 0;
+  for (let i = 0; i < (n + padLen) / 16; i++) {
+    for (let j = 0; j < 16; j++) { C[j] ^= S[m[i * 16 + j] ^ L]; L = C[j]; }
+  }
+  m.set(C, n + padLen);
+  const X = new Uint8Array(48);
+  for (let i = 0; i < m.length / 16; i++) {
+    for (let j = 0; j < 16; j++) { X[16 + j] = m[i * 16 + j]; X[32 + j] = X[16 + j] ^ X[j]; }
+    let t = 0;
+    for (let j = 0; j < 18; j++) {
+      for (let k = 0; k < 48; k++) { X[k] ^= S[t]; t = X[k]; }
+      t = (t + j) & 255;
+    }
+  }
+  return X.slice(0, 16);
+}
+
+function hashMd4(bytes) {
+  const m = hashPad(bytes, 64, 8, true);
+  const dv = new DataView(m.buffer);
+  const X = new Array(16);
+  let h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+  const F = (x, y, z) => (x & y) | (~x & z);
+  const G = (x, y, z) => (x & y) | (x & z) | (y & z);
+  const H = (x, y, z) => x ^ y ^ z;
+  const order2 = [0,4,8,12,1,5,9,13,2,6,10,14,3,7,11,15];
+  const order3 = [0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15];
+  for (let off = 0; off < m.length; off += 64) {
+    for (let i = 0; i < 16; i++) X[i] = dv.getUint32(off + i * 4, true);
+    let [a, b, c, d] = h;
+    const step = (fn, k, s, K) => {
+      a = hashRol((a + fn(b, c, d) + X[k] + K) | 0, s);
+      [a, b, c, d] = [d, a, b, c];
+    };
+    for (let i = 0; i < 16; i++) step(F, i, [3, 7, 11, 19][i % 4], 0);
+    for (let i = 0; i < 16; i++) step(G, order2[i], [3, 5, 9, 13][i % 4], 0x5a827999);
+    for (let i = 0; i < 16; i++) step(H, order3[i], [3, 9, 11, 15][i % 4], 0x6ed9eba1);
+    h = [(h[0] + a) | 0, (h[1] + b) | 0, (h[2] + c) | 0, (h[3] + d) | 0];
+  }
+  return hashWordsOut(h, true);
+}
+
+let HASH_MD5_K = null;
+const HASH_MD5_S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+  4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+function hashMd5(bytes) {
+  if (!HASH_MD5_K) HASH_MD5_K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) | 0);
+  const K = HASH_MD5_K;
+  const m = hashPad(bytes, 64, 8, true);
+  const dv = new DataView(m.buffer);
+  const X = new Array(16);
+  let h = [0x67452301, 0xefcdab89 | 0, 0x98badcfe | 0, 0x10325476];
+  for (let off = 0; off < m.length; off += 64) {
+    for (let i = 0; i < 16; i++) X[i] = dv.getUint32(off + i * 4, true);
+    let [a, b, c, d] = h;
+    for (let i = 0; i < 64; i++) {
+      let f, g;
+      if (i < 16) { f = (b & c) | (~b & d); g = i; }
+      else if (i < 32) { f = (d & b) | (~d & c); g = (5 * i + 1) % 16; }
+      else if (i < 48) { f = b ^ c ^ d; g = (3 * i + 5) % 16; }
+      else { f = c ^ (b | ~d); g = (7 * i) % 16; }
+      f = (f + a + K[i] + X[g]) | 0;
+      a = d; d = c; c = b;
+      b = (b + hashRol(f, HASH_MD5_S[i])) | 0;
+    }
+    h = [(h[0] + a) | 0, (h[1] + b) | 0, (h[2] + c) | 0, (h[3] + d) | 0];
+  }
+  return hashWordsOut(h, true);
+}
+
+function hashSha1(bytes) {
+  const m = hashPad(bytes, 64, 8, false);
+  const dv = new DataView(m.buffer);
+  const w = new Array(80);
+  let h = [0x67452301, 0xefcdab89 | 0, 0x98badcfe | 0, 0x10325476, 0xc3d2e1f0 | 0];
+  for (let off = 0; off < m.length; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+    for (let i = 16; i < 80; i++) w[i] = hashRol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+    let [a, b, c, d, e] = h;
+    for (let i = 0; i < 80; i++) {
+      let f, k;
+      if (i < 20) { f = (b & c) | (~b & d); k = 0x5a827999; }
+      else if (i < 40) { f = b ^ c ^ d; k = 0x6ed9eba1; }
+      else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8f1bbcdc | 0; }
+      else { f = b ^ c ^ d; k = 0xca62c1d6 | 0; }
+      const t = (hashRol(a, 5) + f + e + k + w[i]) | 0;
+      e = d; d = c; c = hashRol(b, 30); b = a; a = t;
+    }
+    h = [(h[0] + a) | 0, (h[1] + b) | 0, (h[2] + c) | 0, (h[3] + d) | 0, (h[4] + e) | 0];
+  }
+  return hashWordsOut(h, false);
+}
+
+// SHA-2 constants are derived from the fractional parts of prime roots, computed exactly with BigInt
+let HASH_SHA2 = null;
+function hashSha2Consts() {
+  if (HASH_SHA2) return HASH_SHA2;
+  const primes = [];
+  for (let n = 2; primes.length < 80; n++) if (primes.every(p => n % p)) primes.push(n);
+  const root = (n, k) => {
+    let x = 1n << BigInt(Math.ceil(n.toString(2).length / Number(k)));
+    for (;;) {
+      const y = ((k - 1n) * x + n / x ** (k - 1n)) / k;
+      if (y >= x) return x;
+      x = y;
+    }
+  };
+  const M64 = (1n << 64n) - 1n;
+  const cbrtFrac = p => root(BigInt(p) << 192n, 3n) & M64;
+  const sqrtFrac = p => root(BigInt(p) << 128n, 2n) & M64;
+  const K512 = primes.map(cbrtFrac);
+  HASH_SHA2 = {
+    K512,
+    K256: K512.slice(0, 64).map(v => Number(v >> 32n) | 0),
+    H256: primes.slice(0, 8).map(p => Number(sqrtFrac(p) >> 32n) | 0),
+    H512: primes.slice(0, 8).map(sqrtFrac),
+    H384: primes.slice(8, 16).map(sqrtFrac)
+  };
+  return HASH_SHA2;
+}
+
+function hashSha256Core(bytes, init, outWords) {
+  const { K256 } = hashSha2Consts();
+  const m = hashPad(bytes, 64, 8, false);
+  const dv = new DataView(m.buffer);
+  const w = new Array(64);
+  let h = init.slice();
+  for (let off = 0; off < m.length; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false) | 0;
+    for (let i = 16; i < 64; i++) {
+      const s0 = hashRor(w[i - 15], 7) ^ hashRor(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = hashRor(w[i - 2], 17) ^ hashRor(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const S1 = hashRor(e, 6) ^ hashRor(e, 11) ^ hashRor(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (hh + S1 + ch + K256[i] + w[i]) | 0;
+      const S0 = hashRor(a, 2) ^ hashRor(a, 13) ^ hashRor(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h = [a, b, c, d, e, f, g, hh].map((v, i) => (h[i] + v) | 0);
+  }
+  return hashWordsOut(h.slice(0, outWords), false);
+}
+const hashSha256 = bytes => hashSha256Core(bytes, hashSha2Consts().H256, 8);
+const hashSha224 = bytes => hashSha256Core(bytes,
+  [0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4].map(v => v | 0), 7);
+
+function hashSha512Core(bytes, init, outBytes) {
+  const { K512 } = hashSha2Consts();
+  const M = (1n << 64n) - 1n;
+  const ror = (x, n) => ((x >> n) | (x << (64n - n))) & M;
+  const m = hashPad(bytes, 128, 16, false);
+  const dv = new DataView(m.buffer);
+  const w = new Array(80);
+  let h = init.slice();
+  for (let off = 0; off < m.length; off += 128) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getBigUint64(off + i * 8, false);
+    for (let i = 16; i < 80; i++) {
+      const s0 = ror(w[i - 15], 1n) ^ ror(w[i - 15], 8n) ^ (w[i - 15] >> 7n);
+      const s1 = ror(w[i - 2], 19n) ^ ror(w[i - 2], 61n) ^ (w[i - 2] >> 6n);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & M;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 80; i++) {
+      const S1 = ror(e, 14n) ^ ror(e, 18n) ^ ror(e, 41n);
+      const ch = (e & f) ^ (~e & M & g);
+      const t1 = (hh + S1 + ch + K512[i] + w[i]) & M;
+      const S0 = ror(a, 28n) ^ ror(a, 34n) ^ ror(a, 39n);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) & M;
+      hh = g; g = f; f = e; e = (d + t1) & M; d = c; c = b; b = a; a = (t1 + t2) & M;
+    }
+    h = [a, b, c, d, e, f, g, hh].map((v, i) => (h[i] + v) & M);
+  }
+  const out = new Uint8Array(64);
+  const odv = new DataView(out.buffer);
+  h.forEach((v, i) => odv.setBigUint64(i * 8, v, false));
+  return out.slice(0, outBytes);
+}
+const hashSha384 = bytes => hashSha512Core(bytes, hashSha2Consts().H384, 48);
+const hashSha512 = bytes => hashSha512Core(bytes, hashSha2Consts().H512, 64);
+
+const hashHex = u8 => Array.from(u8, b => b.toString(16).padStart(2, '0')).join('');
+/* HASH-ALGOS-END */
+
+const HG_ALGOS = [
+  ['MD2', hashMd2], ['MD4', hashMd4], ['MD5', hashMd5], ['SHA1', hashSha1],
+  ['SHA224', hashSha224], ['SHA256', hashSha256], ['SHA384', hashSha384], ['SHA512', hashSha512]
+];
+const HG_SAMPLE = 'Ut quidem aut expedita porro ut ipsa ea et earum dolorem sapiente molestias delectus dolores. Ducimus sunt eos enim dolor ullam sint doloremque et quas dolor molestias explicabo. Architecto eius vero quibusdam cupiditate facilis officiis aliquid adipisci. Excepturi quam voluptatem dolorem accusantium aliquid dolorem omnis voluptas porro ea eos maxime sint quia.';
+
+const hgInput = document.getElementById('hgInput');
+const hgInfo = document.getElementById('hgInfo');
+const hgLower = document.getElementById('hgLower');
+const hgFileInput = document.getElementById('hgFile');
+const hgRows = document.getElementById('hgRows');
+let hgFileData = null; // { name, bytes } when a file is loaded instead of text
+
+const hgOutputs = HG_ALGOS.map(([name]) => {
+  const row = document.createElement('div');
+  row.className = 'hg-row';
+  row.innerHTML = '<span class="nb-label">' + name + ':</span>' +
+    '<div class="nb-field"><input type="text" class="nb-input hg-input" readonly spellcheck="false"><button class="btn">📋 Copy</button></div>';
+  hgRows.appendChild(row);
+  const input = row.querySelector('input');
+  row.querySelector('button').onclick = e => copyText(input.value, e.currentTarget);
+  return input;
+});
+
+function runHg() {
+  const bytes = hgFileData ? hgFileData.bytes : new TextEncoder().encode(hgInput.value);
+  hgInfo.textContent = bytes.length + ' byte' + (bytes.length === 1 ? '' : 's') +
+    (hgFileData ? ' (file: ' + hgFileData.name + ')' : ' (string)');
+  HG_ALGOS.forEach(([, fn], i) => {
+    const hex = hashHex(fn(bytes));
+    hgOutputs[i].value = hgLower.checked ? hex : hex.toUpperCase();
+  });
+}
+
+function hgSetText(text) {
+  hgFileData = null;
+  hgInput.disabled = false;
+  hgInput.placeholder = '';
+  hgInput.value = text;
+  runHg();
+}
+
+hgInput.addEventListener('input', () => { hgFileData = null; runHg(); });
+hgLower.addEventListener('change', runHg);
+document.getElementById('hgSample').onclick = () => hgSetText(HG_SAMPLE);
+document.getElementById('hgClear').onclick = () => { hgSetText(''); hgInput.focus(); };
+document.getElementById('hgLoad').onclick = () => hgFileInput.click();
+hgFileInput.addEventListener('change', async () => {
+  const file = hgFileInput.files[0];
+  hgFileInput.value = '';
+  if (!file) return;
+  hgFileData = { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  hgInput.value = '';
+  hgInput.placeholder = 'File loaded: ' + file.name + ' (type here to hash text instead)';
+  runHg();
 });
 
 /* boot with Unix Time Converter */
