@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DevUtils — JWT Debugger</title>
+<link rel="icon" type="image/png" href="application.png">
 <style>
   :root{
     --bg-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0c0f1d 50%, #06080f 100%);
@@ -49,11 +50,14 @@
   body{
     margin:0;background:var(--bg-gradient);background-attachment:fixed;
     font-family:var(--ui);color:var(--text);
-    display:flex;align-items:center;justify-content:center;padding:16px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;
     -webkit-font-smoothing:antialiased;
   }
+  .footer{flex:none;font-size:12px;color:var(--text-muted);text-align:center}
+  .footer a{color:var(--text-dim);text-decoration:none}
+  .footer a:hover{color:var(--text);text-decoration:underline}
   .window{
-    width:min(1600px,100%);height:min(980px,calc(100vh - 32px));
+    width:min(1600px,100%);flex:1 1 auto;min-height:0;max-height:980px;
     background:var(--win-bg);border-radius:14px;overflow:hidden;
     box-shadow:0 25px 60px -15px rgba(0,0,0,0.85),0 0 50px -12px rgba(99,102,241,0.18);
     border:1px solid var(--border-strong);
@@ -636,6 +640,10 @@
       </div>
     </main>
   </div>
+</div>
+
+<div class="footer">
+<a href="https://www.flaticon.com/free-icons/application" title="application icons">Application icons created by Ehtisham Abid - Flaticon</a>
 </div>
 
 <script>
