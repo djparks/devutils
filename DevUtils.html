@@ -339,6 +339,64 @@
         </section>
       </div>
 
+      <!-- YAML <-> Properties Tool View -->
+      <div class="url-tool side-by-side" id="propTool" style="display:none">
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Input:</span>
+            <button class="btn" id="propSample">Sample</button>
+            <button class="btn" id="propClear">Clear</button>
+            <div class="select" title="Conversion direction">
+              <select id="propDirection">
+                <option value="auto">Auto-detect</option>
+                <option value="y2p">YAML → Property</option>
+                <option value="p2y">Property → YAML</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+          </div>
+          <textarea class="url-area" id="propInput" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </section>
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Output:</span>
+            <span class="url-status" id="propStatus"></span>
+            <span class="spacer"></span>
+            <div class="select" id="propArraysWrap" title="List item key style">
+              <select id="propArrays">
+                <option value="bracket">key[0]</option>
+                <option value="dot">key.0</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <div class="select" id="propUnicodeWrap" title="Non-ASCII characters: keep as UTF-8 text or escape as \uXXXX">
+              <select id="propUnicode">
+                <option value="raw">UTF-8</option>
+                <option value="esc">\uXXXX</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <div class="select" id="propValuesWrap" title="Values: Typed infers numbers/booleans (8080, true); Strings keeps everything quoted text">
+              <select id="propValues">
+                <option value="infer">Typed</option>
+                <option value="string">Strings</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <div class="select" id="propIndentWrap" title="YAML indentation">
+              <select id="propIndent">
+                <option value="2">2 spaces</option>
+                <option value="4">4 spaces</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <button class="btn" id="propCopy">📋 Copy</button>
+            <button class="btn" id="propUseAsInput">Use as input ⤴</button>
+          </div>
+          <textarea class="url-area" id="propOutput" readonly spellcheck="false"></textarea>
+        </section>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

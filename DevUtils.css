@@ -287,6 +287,8 @@
   .url-radio input{accent-color:var(--accent);width:15px;height:15px;margin:0;cursor:pointer}
   .url-status{font-size:12.5px;color:var(--text-muted)}
   .url-status.bad{color:#f87171}
+  #propTool .toolbar{gap:8px}
+  #propTool .url-status:empty{display:none}
 
   /* yaml <-> json tool */
   .url-tool.side-by-side{flex-direction:row}

@@ -5,7 +5,7 @@ const TOOLS = [
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['&','URL Parser'], ['#;','HTML Entity Encode/Decode'], ['\\n','Backslash Escape/Unescape'],
   ['±','Text Diff Checker'],
-  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['01','Number Base Converter']
+  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -37,12 +37,14 @@ function selectTool(name) {
   const jwtToolEl = document.getElementById('jwtTool');
   const urlToolEl = document.getElementById('urlTool');
   const yamlToolEl = document.getElementById('yamlTool');
+  const propToolEl = document.getElementById('propTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
   jwtToolEl.style.display = 'none';
   urlToolEl.style.display = 'none';
   yamlToolEl.style.display = 'none';
+  propToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -58,6 +60,10 @@ function selectTool(name) {
     yamlToolEl.style.display = 'flex';
     yamlDirectionSel.value = name === 'YAML to JSON' ? 'y2j' : 'j2y';
     runYaml();
+  } else if (name === 'YAML to Property' || name === 'Property to YAML') {
+    propToolEl.style.display = 'flex';
+    propDirectionSel.value = name === 'YAML to Property' ? 'y2p' : 'p2y';
+    runProp();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -1014,6 +1020,220 @@ document.getElementById('yamlUseAsInput').onclick = () => {
   yamlInput.value = yamlOutput.value;
   if (yamlDirectionSel.value !== 'auto') yamlDirectionSel.value = dir === 'y2j' ? 'j2y' : 'y2j';
   runYaml();
+};
+
+/* ---------------- YAML <-> Properties ---------------- */
+// Escapes a key or value for the Java .properties format
+function propEscape(s, isKey, unicode) {
+  let r = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\') r += '\\\\';
+    else if (c === '\n') r += '\\n';
+    else if (c === '\r') r += '\\r';
+    else if (c === '\t') r += '\\t';
+    else if (c === '\f') r += '\\f';
+    else if (isKey && (c === ' ' || c === '=' || c === ':')) r += '\\' + c;
+    else if (i === 0 && (c === ' ' || (isKey && (c === '#' || c === '!')))) r += '\\' + c;
+    else if (c < ' ' || (unicode && c > '~')) r += '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0');
+    else r += c;
+  }
+  return r;
+}
+
+function yamlToProps(text, arrays, unicode) {
+  const v = yamlParse(text);
+  if (v === null) return '';
+  if (typeof v !== 'object') throw new Error('Top-level value must be a mapping or a list');
+  const out = [];
+  const walk = (x, path) => {
+    if (Array.isArray(x) && x.length) {
+      x.forEach((e, i) => walk(e, arrays === 'dot' ? (path ? path + '.' + i : String(i)) : path + '[' + i + ']'));
+    } else if (x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).length) {
+      for (const k of Object.keys(x)) walk(x[k], (path ? path + '.' : '') + propEscape(k, true, unicode));
+    } else {
+      const val = x === null || x === undefined || Array.isArray(x) || typeof x === 'object' ? '' : String(x);
+      out.push(path + '=' + propEscape(val, false, unicode));
+    }
+  };
+  walk(v, '');
+  return out.join('\n');
+}
+
+// Parses .properties text into [[key, value], ...]
+function propsParse(text) {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+  const entries = [];
+  const readEsc = (s, i, ln) => { // s[i] is the char after a backslash -> [char, nextIndex]
+    const c = s[i];
+    if (c === undefined) return ['', i];
+    if (c === 'u') {
+      const hex = s.slice(i + 1, i + 5);
+      if (!/^[0-9a-fA-F]{4}$/.test(hex)) throw new Error('Malformed \\u escape (line ' + ln + ')');
+      return [String.fromCharCode(parseInt(hex, 16)), i + 5];
+    }
+    const map = { n: '\n', r: '\r', t: '\t', f: '\f' };
+    return [c in map ? map[c] : c, i + 1];
+  };
+  for (let n = 0; n < lines.length; n++) {
+    let line = lines[n].replace(/^[ \t\f]+/, '');
+    if (line === '' || line[0] === '#' || line[0] === '!') continue;
+    const startLn = n + 1;
+    while (/(^|[^\\])(\\\\)*\\$/.test(line) && n + 1 < lines.length) {
+      line = line.slice(0, -1) + lines[++n].replace(/^[ \t\f]+/, '');
+    }
+    if (/(^|[^\\])(\\\\)*\\$/.test(line)) line = line.slice(0, -1);
+    let i = 0, key = '';
+    while (i < line.length) {
+      const c = line[i];
+      if (c === '\\') { const r = readEsc(line, i + 1, startLn); key += r[0]; i = r[1]; }
+      else if (c === '=' || c === ':' || c === ' ' || c === '\t' || c === '\f') break;
+      else { key += c; i++; }
+    }
+    while (/[ \t\f]/.test(line[i] || '')) i++;
+    if (line[i] === '=' || line[i] === ':') i++;
+    while (/[ \t\f]/.test(line[i] || '')) i++;
+    let val = '';
+    while (i < line.length) {
+      if (line[i] === '\\') { const r = readEsc(line, i + 1, startLn); val += r[0]; i = r[1]; }
+      else val += line[i++];
+    }
+    entries.push([key, val, startLn]);
+  }
+  return entries;
+}
+
+function propKeyPath(key, ln) {
+  const segs = [];
+  let buf = '';
+  const flush = () => { if (buf !== '') segs.push({ k: buf, idx: false }); buf = ''; };
+  for (let i = 0; i < key.length; i++) {
+    const c = key[i];
+    if (c === '.') flush();
+    else if (c === '[') {
+      const m = /^\[(\d+)\]/.exec(key.slice(i));
+      if (m) { flush(); segs.push({ k: String(Number(m[1])), idx: true }); i += m[0].length - 1; }
+      else buf += c;
+    } else buf += c;
+  }
+  flush();
+  if (!segs.length) throw new Error('Empty key (line ' + ln + ')');
+  return segs;
+}
+
+function propsToYaml(text, infer, indent) {
+  const entries = propsParse(text);
+  if (!entries.length) return '';
+  const mk = () => ({ kids: new Map(), hasIdx: false, hasKey: false, leaf: false, value: '' });
+  const root = mk();
+  for (const [key, value, ln] of entries) {
+    let node = root, path = '';
+    for (const s of propKeyPath(key, ln)) {
+      path += (path ? '.' : '') + s.k;
+      if (node.leaf) throw new Error("'" + path.slice(0, path.lastIndexOf('.')) + "' is both a value and a parent (line " + ln + ')');
+      if (s.idx) node.hasIdx = true; else node.hasKey = true;
+      let child = node.kids.get(s.k);
+      if (!child) { child = mk(); node.kids.set(s.k, child); }
+      node = child;
+    }
+    if (node.kids.size) throw new Error("'" + key + "' is both a value and a parent (line " + ln + ')');
+    node.leaf = true; node.value = value;
+  }
+  const conv = node => {
+    if (node.leaf) return infer && node.value !== '' ? yamlResolvePlain(node.value) : node.value;
+    if (node.hasIdx && node.hasKey) throw new Error('A key mixes list indexes and names');
+    const keys = [...node.kids.keys()];
+    const contiguous = keys.length > 0 && keys.every(k => /^\d+$/.test(k)) && keys.map(Number).sort((a, b) => a - b).every((n, i) => n === i);
+    if (node.hasIdx || contiguous) {
+      const size = Math.max(...keys.map(Number)) + 1;
+      if (size > 10000) throw new Error('List index too large');
+      const arr = new Array(size).fill(null);
+      for (const [k, c] of node.kids) arr[Number(k)] = conv(c);
+      return arr;
+    }
+    return Object.fromEntries([...node.kids].map(([k, c]) => [k, conv(c)]));
+  };
+  return yamlDump(conv(root), indent === '4' ? 4 : 2);
+}
+
+function propLooksLikeProps(text) {
+  for (const raw of text.split(/\r?\n|\r/)) {
+    const l = raw.trim();
+    if (!l || l[0] === '#' || l[0] === '!') continue;
+    if (/^(---|-\s|-$|\[|\{)/.test(l)) return false;
+    const eq = l.indexOf('=');
+    const m = /:(\s|$)/.exec(l);
+    return eq !== -1 && (!m || eq < m.index);
+  }
+  return false;
+}
+
+/* ----- YAML <-> Properties screen ----- */
+const propInput = document.getElementById('propInput');
+const propOutput = document.getElementById('propOutput');
+const propDirectionSel = document.getElementById('propDirection');
+const propArraysSel = document.getElementById('propArrays');
+const propUnicodeSel = document.getElementById('propUnicode');
+const propValuesSel = document.getElementById('propValues');
+const propIndentSel = document.getElementById('propIndent');
+const propStatus = document.getElementById('propStatus');
+
+const PROP_YAML_SAMPLE = `server:
+  port: 8080
+  hosts:
+    - alpha.example.com
+    - beta.example.com
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/app
+    username: admin
+logging:
+  level:
+    root: INFO
+`;
+const PROP_SAMPLE = yamlToProps(PROP_YAML_SAMPLE, 'bracket', false);
+
+function propDirection(text) {
+  const d = propDirectionSel.value;
+  return d !== 'auto' ? d : (propLooksLikeProps(text) ? 'p2y' : 'y2p');
+}
+
+function runProp() {
+  const text = propInput.value;
+  const dir = propDirection(text);
+  const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
+  show('propArraysWrap', dir === 'y2p'); show('propUnicodeWrap', dir === 'y2p');
+  show('propValuesWrap', dir === 'p2y'); show('propIndentWrap', dir === 'p2y');
+  propInput.classList.remove('err');
+  propStatus.className = 'url-status';
+  propStatus.textContent = '';
+  try {
+    propOutput.value = dir === 'y2p'
+      ? yamlToProps(text, propArraysSel.value, propUnicodeSel.value === 'esc')
+      : propsToYaml(text, propValuesSel.value === 'infer', propIndentSel.value);
+    if (propDirectionSel.value === 'auto' && text.trim())
+      propStatus.textContent = 'Detected ' + (dir === 'y2p' ? 'YAML → Property' : 'Property → YAML');
+  } catch (e) {
+    propOutput.value = '';
+    propInput.classList.add('err');
+    propStatus.className = 'url-status bad';
+    propStatus.textContent = (dir === 'y2p' ? 'Invalid YAML: ' : 'Invalid Property: ') + e.message;
+  }
+}
+
+propInput.addEventListener('input', runProp);
+for (const s of [propDirectionSel, propArraysSel, propUnicodeSel, propValuesSel, propIndentSel]) s.addEventListener('change', runProp);
+document.getElementById('propSample').onclick = () => {
+  propInput.value = propDirectionSel.value === 'p2y' ? PROP_SAMPLE : PROP_YAML_SAMPLE;
+  runProp();
+};
+document.getElementById('propClear').onclick = () => { propInput.value = ''; runProp(); propInput.focus(); };
+document.getElementById('propCopy').onclick = e => copyText(propOutput.value, e.currentTarget);
+document.getElementById('propUseAsInput').onclick = () => {
+  const dir = propDirection(propInput.value);
+  propInput.value = propOutput.value;
+  if (propDirectionSel.value !== 'auto') propDirectionSel.value = dir === 'y2p' ? 'p2y' : 'y2p';
+  runProp();
 };
 
 /* boot with Unix Time Converter */
