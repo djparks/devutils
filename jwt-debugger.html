@@ -273,6 +273,24 @@
     color:var(--text-dim);font-size:15px;gap:8px;
   }
   .placeholder-tool h3{margin:0;color:var(--text);font-size:18px}
+
+  /* url encode/decode tool */
+  .url-tool{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 20px;gap:12px}
+  .url-pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .url-area{
+    flex:1;margin-top:12px;min-height:80px;width:100%;resize:none;
+    background:var(--field-bg);border:1px solid var(--border-strong);border-radius:8px;
+    padding:12px 14px;font:14px/1.6 var(--mono);color:var(--text);outline:0;
+    white-space:pre-wrap;word-break:break-all;overflow:auto;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,0.35);
+    transition:border-color .15s ease,box-shadow .15s ease;
+  }
+  .url-area:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(99,102,241,0.2)}
+  .url-area.err{border-color:var(--red)}
+  .url-radio{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;user-select:none}
+  .url-radio input{accent-color:var(--accent);width:15px;height:15px;margin:0;cursor:pointer}
+  .url-status{font-size:12.5px;color:var(--text-muted)}
+  .url-status.bad{color:#f87171}
 </style>
 </head>
 <body>
@@ -535,6 +553,39 @@
         </aside>
       </div>
 
+      <!-- URL Encode/Decode Tool View -->
+      <div class="url-tool" id="urlTool" style="display:none">
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Input:</span>
+            <button class="btn" id="urlSample">Sample</button>
+            <button class="btn" id="urlClear">Clear</button>
+            <div class="select" title="Encoding options">
+              <select id="urlMode">
+                <option value="rfc3986">RFC 3986</option>
+                <option value="form">Form Data (space as +)</option>
+                <option value="uri">Full URI (keep reserved chars)</option>
+              </select>
+              <span class="chev">▲<br>▼</span>
+            </div>
+            <span class="spacer"></span>
+            <label class="url-radio"><input type="radio" name="urlDir" value="encode" checked> Encode</label>
+            <label class="url-radio"><input type="radio" name="urlDir" value="decode"> Decode</label>
+          </div>
+          <textarea class="url-area" id="urlInput" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </section>
+        <section class="url-pane">
+          <div class="toolbar">
+            <span class="label">Output:</span>
+            <span class="url-status" id="urlStatus"></span>
+            <span class="spacer"></span>
+            <button class="btn" id="urlCopy">📋 Copy</button>
+            <button class="btn" id="urlUseAsInput">Use as input ⤴</button>
+          </div>
+          <textarea class="url-area" id="urlOutput" readonly spellcheck="false"></textarea>
+        </section>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>
@@ -547,11 +598,11 @@
 <script>
 /* ---------------- sidebar ---------------- */
 const TOOLS = [
-  ['🕘','Unix Time Converter'], ['{,}','JSON Format/Validate'],
+  ['🕘','Unix Time Converter'],
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['&','URL Parser'], ['#;','HTML Entity Encode/Decode'], ['\\n','Backslash Escape/Unescape'],
-  ['ID','UUID/ULID Generate/Decode'], ['</>','HTML Preview'], ['±','Text Diff Checker'],
+  ['±','Text Diff Checker'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['01','Number Base Converter']
 ];
 
@@ -582,21 +633,24 @@ function selectTool(name) {
 
   const unixToolEl = document.getElementById('unixTool');
   const jwtToolEl = document.getElementById('jwtTool');
+  const urlToolEl = document.getElementById('urlTool');
   const otherToolEl = document.getElementById('otherTool');
+
+  unixToolEl.style.display = 'none';
+  jwtToolEl.style.display = 'none';
+  urlToolEl.style.display = 'none';
+  otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
     unixToolEl.style.display = 'flex';
-    jwtToolEl.style.display = 'none';
-    otherToolEl.style.display = 'none';
     updateUnixTime();
   } else if (name === 'JWT Debugger') {
-    unixToolEl.style.display = 'none';
     jwtToolEl.style.display = 'flex';
-    otherToolEl.style.display = 'none';
     runJwt();
+  } else if (name === 'URL Encode/Decode') {
+    urlToolEl.style.display = 'flex';
+    runUrl();
   } else {
-    unixToolEl.style.display = 'none';
-    jwtToolEl.style.display = 'none';
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
   }
@@ -996,6 +1050,57 @@ document.getElementById('btnClear').onclick = () => { ta.value = ''; runJwt(); t
 document.getElementById('btnCopyToken').onclick = e => copyText(ta.value, e.currentTarget);
 for (const b of document.querySelectorAll('[data-copy]'))
   b.onclick = e => copyText(decoded[b.dataset.copy] || '', e.currentTarget);
+
+/* ---------------- URL Encode/Decode ---------------- */
+const urlInput = document.getElementById('urlInput');
+const urlOutput = document.getElementById('urlOutput');
+const urlModeSel = document.getElementById('urlMode');
+const urlStatus = document.getElementById('urlStatus');
+const urlDir = () => document.querySelector('input[name="urlDir"]:checked').value;
+
+const URL_SAMPLE = 'abc 0123 !@#$%^&*()|+?"<>\',.;:` {"store":{"book":[{"category":"reference", "sold": false,"author":"Nigel Rees","title":"Sayings of the Century","price":8.95},{"category":"fiction","author":"Evelyn Waugh","title":"Sword of Honour","price":12.99}],"bicycle":{"color":"red","price":19.95}}}';
+
+// RFC 3986: only unreserved characters (A-Z a-z 0-9 - . _ ~) stay literal
+const rfc3986Encode = s => encodeURIComponent(s).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+
+function urlTransform(text, dir, mode) {
+  if (dir === 'encode') {
+    if (mode === 'form') return rfc3986Encode(text).replace(/%20/g, '+');
+    if (mode === 'uri') return encodeURI(text).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+    return rfc3986Encode(text);
+  }
+  if (mode === 'form') text = text.replace(/\+/g, ' ');
+  return mode === 'uri' ? decodeURI(text) : decodeURIComponent(text);
+}
+
+function runUrl() {
+  urlInput.classList.remove('err');
+  urlStatus.className = 'url-status';
+  urlStatus.textContent = '';
+  try {
+    urlOutput.value = urlTransform(urlInput.value, urlDir(), urlModeSel.value);
+  } catch (e) {
+    urlOutput.value = '';
+    urlInput.classList.add('err');
+    urlStatus.className = 'url-status bad';
+    urlStatus.textContent = 'Invalid percent-encoded input (' + e.message + ')';
+  }
+}
+
+urlInput.addEventListener('input', runUrl);
+urlModeSel.addEventListener('change', runUrl);
+for (const r of document.querySelectorAll('input[name="urlDir"]')) r.addEventListener('change', runUrl);
+document.getElementById('urlSample').onclick = () => {
+  urlInput.value = urlDir() === 'decode' ? urlTransform(URL_SAMPLE, 'encode', urlModeSel.value) : URL_SAMPLE;
+  runUrl();
+};
+document.getElementById('urlClear').onclick = () => { urlInput.value = ''; runUrl(); urlInput.focus(); };
+document.getElementById('urlCopy').onclick = e => copyText(urlOutput.value, e.currentTarget);
+document.getElementById('urlUseAsInput').onclick = () => {
+  urlInput.value = urlOutput.value;
+  document.querySelector('input[name="urlDir"]:not(:checked)').checked = true;
+  runUrl();
+};
 
 /* boot with Unix Time Converter */
 selectTool('Unix Time Converter');
