@@ -3,7 +3,7 @@ const TOOLS = [
   ['🕘','Unix Time Converter'],
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
-  ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
+  ['⇄','YAML / JSON / Properties'], ['01','Number Base Converter'],
   ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression']
 ];
 
@@ -36,8 +36,7 @@ function selectTool(name) {
   const jwtToolEl = document.getElementById('jwtTool');
   const urlToolEl = document.getElementById('urlTool');
   const b64ToolEl = document.getElementById('b64Tool');
-  const yamlToolEl = document.getElementById('yamlTool');
-  const propToolEl = document.getElementById('propTool');
+  const cvToolEl = document.getElementById('cvTool');
   const nbToolEl = document.getElementById('nbTool');
   const dcToolEl = document.getElementById('dcTool');
   const hgToolEl = document.getElementById('hgTool');
@@ -50,8 +49,7 @@ function selectTool(name) {
   jwtToolEl.style.display = 'none';
   urlToolEl.style.display = 'none';
   b64ToolEl.style.display = 'none';
-  yamlToolEl.style.display = 'none';
-  propToolEl.style.display = 'none';
+  cvToolEl.style.display = 'none';
   nbToolEl.style.display = 'none';
   dcToolEl.style.display = 'none';
   hgToolEl.style.display = 'none';
@@ -72,14 +70,9 @@ function selectTool(name) {
   } else if (name === 'Base64 String Encode/Decode') {
     b64ToolEl.style.display = 'flex';
     runB64();
-  } else if (name === 'YAML to JSON' || name === 'JSON to YAML') {
-    yamlToolEl.style.display = 'flex';
-    yamlDirectionSel.value = name === 'YAML to JSON' ? 'y2j' : 'j2y';
-    runYaml();
-  } else if (name === 'YAML to Property' || name === 'Property to YAML') {
-    propToolEl.style.display = 'flex';
-    propDirectionSel.value = name === 'YAML to Property' ? 'y2p' : 'p2y';
-    runProp();
+  } else if (name === 'YAML / JSON / Properties') {
+    cvToolEl.style.display = 'flex';
+    runCv();
   } else if (name === 'Number Base Converter') {
     nbToolEl.style.display = 'flex';
   } else if (name === 'Date Calculator') {
@@ -1020,80 +1013,11 @@ function yamlDump(v, step) {
   return out.join('\n');
 }
 
-/* ----- public helpers ----- */
-function yamlToJson(text, indent) {
-  const v = yamlParse(text);
-  if (v === null && !/\S/.test(text.replace(/^\s*#.*$/gm, ''))) return '';
-  return indent === 'min' ? JSON.stringify(v) : JSON.stringify(v, null, indent === 'tab' ? '\t' : Number(indent));
-}
-function jsonToYaml(text, indent) {
-  if (!text.trim()) return '';
-  return yamlDump(JSON.parse(text), indent === '4' ? 4 : 2);
-}
 function yamlLooksLikeJson(text) {
   const t = text.trim();
   if (t[0] !== '{' && t[0] !== '[') return false;
   try { JSON.parse(t); return true; } catch { return false; }
 }
-
-/* ----- YAML <-> JSON screen ----- */
-const yamlInput = document.getElementById('yamlInput');
-const yamlOutput = document.getElementById('yamlOutput');
-const yamlDirectionSel = document.getElementById('yamlDirection');
-const yamlIndentSel = document.getElementById('yamlIndent');
-const yamlStatus = document.getElementById('yamlStatus');
-
-const YAML_SAMPLE = `---
-# Products purchased
-- item    : Super Hoop
-  quantity: 1
-- item    : Basketball
-  quantity: 4
-- item    : Big Shoes
-  quantity: 1
-`;
-const JSON_SAMPLE = '[{"item":"Super Hoop","quantity":1},{"item":"Basketball","quantity":4},{"item":"Big Shoes","quantity":1}]';
-
-// Resolves the effective direction: 'y2j' or 'j2y'
-function yamlDirection(text) {
-  const d = yamlDirectionSel.value;
-  return d !== 'auto' ? d : (yamlLooksLikeJson(text) ? 'j2y' : 'y2j');
-}
-
-function runYaml() {
-  const text = yamlInput.value;
-  const dir = yamlDirection(text);
-  for (const o of yamlIndentSel.options) o.disabled = dir === 'j2y' && (o.value === 'tab' || o.value === 'min');
-  yamlInput.classList.remove('err');
-  yamlStatus.className = 'url-status';
-  yamlStatus.textContent = '';
-  try {
-    yamlOutput.value = dir === 'y2j' ? yamlToJson(text, yamlIndentSel.value) : jsonToYaml(text, yamlIndentSel.value);
-    if (yamlDirectionSel.value === 'auto' && text.trim())
-      yamlStatus.textContent = 'Detected ' + (dir === 'y2j' ? 'YAML → JSON' : 'JSON → YAML');
-  } catch (e) {
-    yamlOutput.value = '';
-    yamlInput.classList.add('err');
-    yamlStatus.className = 'url-status bad';
-    yamlStatus.textContent = (dir === 'y2j' ? 'Invalid YAML: ' : 'Invalid JSON: ') + e.message;
-  }
-}
-
-yamlInput.addEventListener('input', runYaml);
-yamlDirectionSel.addEventListener('change', runYaml);
-yamlIndentSel.addEventListener('change', runYaml);
-document.getElementById('yamlSample').onclick = () => {
-  yamlInput.value = yamlDirectionSel.value === 'j2y' ? JSON_SAMPLE : YAML_SAMPLE;
-  runYaml();
-};
-document.getElementById('yamlClear').onclick = () => { yamlInput.value = ''; runYaml(); yamlInput.focus(); };
-document.getElementById('yamlCopy').onclick = e => copyText(yamlOutput.value, e.currentTarget);
-document.getElementById('yamlUseAsInput').onclick = () => {
-  const dir = yamlDirection(yamlInput.value);
-  yamlInput.value = yamlOutput.value;
-  if (yamlDirectionSel.value !== 'auto') yamlDirectionSel.value = dir === 'y2j' ? 'j2y' : 'y2j';
-  runYaml();
-};
 
 /* ---------------- YAML <-> Properties ---------------- */
 // Escapes a key or value for the Java .properties format
@@ -1114,9 +1038,8 @@ function propEscape(s, isKey, unicode) {
   return r;
 }
 
-function yamlToProps(text, arrays, unicode) {
-  const v = yamlParse(text);
-  if (v === null) return '';
+function valueToProps(v, arrays, unicode) {
+  if (v === null || v === undefined) return '';
   if (typeof v !== 'object') throw new Error('Top-level value must be a mapping or a list');
   const out = [];
   const walk = (x, path) => {
@@ -1194,9 +1117,9 @@ function propKeyPath(key, ln) {
   return segs;
 }
 
-function propsToYaml(text, infer, indent) {
+function propsToValue(text, infer) {
   const entries = propsParse(text);
-  if (!entries.length) return '';
+  if (!entries.length) return undefined;
   const mk = () => ({ kids: new Map(), hasIdx: false, hasKey: false, leaf: false, value: '' });
   const root = mk();
   for (const [key, value, ln] of entries) {
@@ -1226,7 +1149,7 @@ function propsToYaml(text, infer, indent) {
     }
     return Object.fromEntries([...node.kids].map(([k, c]) => [k, conv(c)]));
   };
-  return yamlDump(conv(root), indent === '4' ? 4 : 2);
+  return conv(root);
 }
 
 function propLooksLikeProps(text) {
@@ -1241,17 +1164,20 @@ function propLooksLikeProps(text) {
   return false;
 }
 
-/* ----- YAML <-> Properties screen ----- */
-const propInput = document.getElementById('propInput');
-const propOutput = document.getElementById('propOutput');
-const propDirectionSel = document.getElementById('propDirection');
-const propArraysSel = document.getElementById('propArrays');
-const propUnicodeSel = document.getElementById('propUnicode');
-const propValuesSel = document.getElementById('propValues');
-const propIndentSel = document.getElementById('propIndent');
-const propStatus = document.getElementById('propStatus');
+/* ----- YAML / JSON / Properties screen ----- */
+const CV_NAMES = { yaml: 'YAML', json: 'JSON', props: 'Properties' };
+const cvInput = document.getElementById('cvInput');
+const cvOutput = document.getElementById('cvOutput');
+const cvFromSel = document.getElementById('cvFrom');
+const cvToSel = document.getElementById('cvTo');
+const cvIndentSel = document.getElementById('cvIndent');
+const cvArraysSel = document.getElementById('cvArrays');
+const cvUnicodeSel = document.getElementById('cvUnicode');
+const cvValuesSel = document.getElementById('cvValues');
+const cvStatus = document.getElementById('cvStatus');
 
-const PROP_YAML_SAMPLE = `server:
+const CV_SAMPLE_YAML = `# Application settings
+server:
   port: 8080
   hosts:
     - alpha.example.com
@@ -1264,49 +1190,84 @@ logging:
   level:
     root: INFO
 `;
-const PROP_SAMPLE = yamlToProps(PROP_YAML_SAMPLE, 'bracket', false);
 
-function propDirection(text) {
-  const d = propDirectionSel.value;
-  return d !== 'auto' ? d : (propLooksLikeProps(text) ? 'p2y' : 'y2p');
+const cvDetect = text => yamlLooksLikeJson(text) ? 'json' : propLooksLikeProps(text) ? 'props' : 'yaml';
+const cvFrom = text => cvFromSel.value === 'auto' ? cvDetect(text) : cvFromSel.value;
+
+// Any format -> plain JS value (undefined when the input is empty)
+function cvParse(text, fmt) {
+  if (!text.trim()) return undefined;
+  if (fmt === 'json') return JSON.parse(text);
+  if (fmt === 'props') return propsToValue(text, cvValuesSel.value === 'infer');
+  const v = yamlParse(text);
+  return v === null && !/\S/.test(text.replace(/^\s*#.*$/gm, '')) ? undefined : v;
 }
 
-function runProp() {
-  const text = propInput.value;
-  const dir = propDirection(text);
+// Plain JS value -> any format
+function cvSerialize(v, fmt) {
+  if (v === undefined) return '';
+  const indent = cvIndentSel.value;
+  if (fmt === 'json') return indent === 'min' ? JSON.stringify(v) : JSON.stringify(v, null, indent === 'tab' ? '\t' : Number(indent));
+  if (fmt === 'yaml') return yamlDump(v, indent === '4' ? 4 : 2);
+  return valueToProps(v, cvArraysSel.value, cvUnicodeSel.value === 'esc');
+}
+
+function runCv() {
+  const text = cvInput.value, from = cvFrom(text), to = cvToSel.value;
   const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
-  show('propArraysWrap', dir === 'y2p'); show('propUnicodeWrap', dir === 'y2p');
-  show('propValuesWrap', dir === 'p2y'); show('propIndentWrap', dir === 'p2y');
-  propInput.classList.remove('err');
-  propStatus.className = 'url-status';
-  propStatus.textContent = '';
+  show('cvValuesWrap', from === 'props');
+  show('cvIndentWrap', to !== 'props');
+  show('cvArraysWrap', to === 'props');
+  show('cvUnicodeWrap', to === 'props');
+  for (const o of cvIndentSel.options) o.disabled = to === 'yaml' && (o.value === 'tab' || o.value === 'min');
+  if (cvIndentSel.selectedOptions[0].disabled) cvIndentSel.value = '2';
+
+  cvInput.classList.remove('err');
+  cvStatus.className = 'url-status';
+  cvStatus.textContent = '';
+  let v;
   try {
-    propOutput.value = dir === 'y2p'
-      ? yamlToProps(text, propArraysSel.value, propUnicodeSel.value === 'esc')
-      : propsToYaml(text, propValuesSel.value === 'infer', propIndentSel.value);
-    if (propDirectionSel.value === 'auto' && text.trim())
-      propStatus.textContent = 'Detected ' + (dir === 'y2p' ? 'YAML → Property' : 'Property → YAML');
+    v = cvParse(text, from);
   } catch (e) {
-    propOutput.value = '';
-    propInput.classList.add('err');
-    propStatus.className = 'url-status bad';
-    propStatus.textContent = (dir === 'y2p' ? 'Invalid YAML: ' : 'Invalid Property: ') + e.message;
+    cvOutput.value = '';
+    cvInput.classList.add('err');
+    cvStatus.className = 'url-status bad';
+    cvStatus.textContent = 'Invalid ' + CV_NAMES[from] + ': ' + e.message;
+    return;
+  }
+  try {
+    cvOutput.value = cvSerialize(v, to);
+  } catch (e) {
+    cvOutput.value = '';
+    cvStatus.className = 'url-status bad';
+    cvStatus.textContent = 'Can\'t convert to ' + CV_NAMES[to] + ': ' + e.message;
+    return;
+  }
+  if (text.trim()) {
+    cvStatus.textContent = (cvFromSel.value === 'auto' ? 'Detected ' : '') + CV_NAMES[from] + ' → ' + CV_NAMES[to] +
+      (from === to ? ' (reformatted)' : '');
   }
 }
 
-propInput.addEventListener('input', runProp);
-for (const s of [propDirectionSel, propArraysSel, propUnicodeSel, propValuesSel, propIndentSel]) s.addEventListener('change', runProp);
-document.getElementById('propSample').onclick = () => {
-  propInput.value = propDirectionSel.value === 'p2y' ? PROP_SAMPLE : PROP_YAML_SAMPLE;
-  runProp();
+cvInput.addEventListener('input', runCv);
+for (const s of [cvFromSel, cvToSel, cvIndentSel, cvArraysSel, cvUnicodeSel, cvValuesSel]) s.addEventListener('change', runCv);
+document.getElementById('cvSample').onclick = () => {
+  const from = cvFromSel.value === 'auto' ? 'yaml' : cvFromSel.value;
+  const v = yamlParse(CV_SAMPLE_YAML);
+  cvInput.value = from === 'yaml' ? CV_SAMPLE_YAML
+    : from === 'json' ? JSON.stringify(v, null, 2) : valueToProps(v, 'bracket', false);
+  if (from === cvToSel.value) cvToSel.value = from === 'json' ? 'yaml' : 'json';
+  runCv();
 };
-document.getElementById('propClear').onclick = () => { propInput.value = ''; runProp(); propInput.focus(); };
-document.getElementById('propCopy').onclick = e => copyText(propOutput.value, e.currentTarget);
-document.getElementById('propUseAsInput').onclick = () => {
-  const dir = propDirection(propInput.value);
-  propInput.value = propOutput.value;
-  if (propDirectionSel.value !== 'auto') propDirectionSel.value = dir === 'y2p' ? 'p2y' : 'y2p';
-  runProp();
+document.getElementById('cvClear').onclick = () => { cvInput.value = ''; runCv(); cvInput.focus(); };
+document.getElementById('cvCopy').onclick = e => copyText(cvOutput.value, e.currentTarget);
+document.getElementById('cvSwap').onclick = () => {
+  const from = cvFrom(cvInput.value), to = cvToSel.value;
+  if (!cvOutput.value) return;
+  cvInput.value = cvOutput.value;
+  if (cvFromSel.value !== 'auto') cvFromSel.value = to;
+  cvToSel.value = from;
+  runCv();
 };
 
 /* ---------------- Number Base Converter ---------------- */
