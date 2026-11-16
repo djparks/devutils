@@ -2016,6 +2016,9 @@ document.querySelectorAll('[data-cm-copy]').forEach(b => {
 /* ---------------- Milliseconds to Seconds ---------------- */
 const msMillis = document.getElementById('msMillis');
 const msSeconds = document.getElementById('msSeconds');
+const msHours = document.getElementById('msHours');
+const msDays = document.getElementById('msDays');
+const MS_FIELD_UNITS = new Map([[msHours, 3600000], [msDays, 86400000]]);
 const msInfo = document.getElementById('msInfo');
 const msJava = document.getElementById('msJava');
 let msValue = 300000;
@@ -2108,11 +2111,12 @@ function runMs(skip) {
   const ms = msValue;
   if (skip !== msMillis) { msMillis.value = String(ms); msMillis.classList.remove('err'); }
   if (skip !== msSeconds) { msSeconds.value = msTrim(Math.floor(ms / 1000), ms % 1000, 3); msSeconds.classList.remove('err'); }
+  for (const [el, unit] of MS_FIELD_UNITS) {
+    if (skip !== el) { el.value = msDec(ms, unit); el.classList.remove('err'); }
+  }
 
   msInfo.innerHTML = '';
   msRow(msInfo, 'Minutes', msDec(ms, 60000));
-  msRow(msInfo, 'Hours', msDec(ms, 3600000));
-  msRow(msInfo, 'Days', msDec(ms, 86400000));
   msRow(msInfo, 'Readable', msHuman(ms));
   msRow(msInfo, 'ISO-8601', msIso(ms));
 
@@ -2140,13 +2144,19 @@ function runMs(skip) {
 function msParse(input) {
   const t = input.value.trim().replace(/[_,\s]/g, '');
   if (input === msMillis) return /^\d+$/.test(t) && Number.isSafeInteger(+t) ? +t : null;
+  if (MS_FIELD_UNITS.has(input)) {
+    // hours/days: any decimal, rounded to the nearest millisecond
+    if (!/^\d+(\.\d+)?$/.test(t)) return null;
+    const ms = Math.round(parseFloat(t) * MS_FIELD_UNITS.get(input));
+    return Number.isSafeInteger(ms) ? ms : null;
+  }
   const m = /^(\d+)(?:\.(\d{1,3}))?$/.exec(t);
   if (!m) return null;
   const ms = +m[1] * 1000 + +(m[2] || '0').padEnd(3, '0');
   return Number.isSafeInteger(ms) ? ms : null;
 }
 
-for (const input of [msMillis, msSeconds]) input.addEventListener('input', () => {
+for (const input of [msMillis, msSeconds, msHours, msDays]) input.addEventListener('input', () => {
   const v = msParse(input);
   input.classList.toggle('err', v === null);
   if (v === null) return;
