@@ -350,6 +350,145 @@ btnClearUnix.onclick = () => {
   unixInput.focus();
 };
 
+/* ----- Date to timestamp (human date -> selected input format) ----- */
+const h2dFields = ['h2dY', 'h2dMo', 'h2dD', 'h2dH', 'h2dMi', 'h2dS'].map(id => document.getElementById(id));
+const h2dText = document.getElementById('h2dText');
+const h2dHint = document.getElementById('h2dHint');
+const H2D_HINT = h2dHint.textContent;
+const H2D_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const h2dUtc = () => document.querySelector('input[name="h2dZone"]:checked').value === 'utc';
+
+// Builds a Date from parts, rejecting roll-overs like 31 Feb. offsetMin = explicit zone offset (null = use local/utc choice)
+function h2dBuild(y, mo, d, h, mi, s, ms, utc, offsetMin) {
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) throw 'Out-of-range date or time value';
+  const asUtc = offsetMin !== null || utc;
+  let t = asUtc ? Date.UTC(y, mo - 1, d, h, mi, s, ms) : new Date(y, mo - 1, d, h, mi, s, ms).getTime();
+  const c = new Date(t);
+  const parts = asUtc ? [c.getUTCFullYear(), c.getUTCMonth() + 1, c.getUTCDate()] : [c.getFullYear(), c.getMonth() + 1, c.getDate()];
+  if (parts[0] !== y || parts[1] !== mo || parts[2] !== d) throw `${MONTHS_FULL[mo - 1] || 'That month'} ${y} has no day ${d}`;
+  if (offsetMin !== null) t -= offsetMin * 60000;
+  return new Date(t);
+}
+
+// Parses a free-text human date. Returns a Date or throws a readable message.
+function h2dParse(raw, utc) {
+  let s = raw.trim().replace(/\s+/g, ' ');
+  if (!s) throw 'Type a date first';
+  if (/^now$/i.test(s)) return new Date();
+
+  // explicit zone at the end: Z, UTC, GMT, +02:00, GMT+2, UTC-05:30
+  let offsetMin = null;
+  // (numeric offsets only after a time, so "16-11-2026" isn't read as offset -20:26)
+  const z = /\s*\b(?:UTC|GMT)(?:\s*([+-])(\d{1,2})(?::?(\d{2}))?)?$/i.exec(s)
+    || /(?<=\d)\s*Z$/i.exec(s)
+    || /(?<=:\d{2}(?:[.,]\d+)?)\s*([+-])(\d{2}):?(\d{2})$/.exec(s);
+  if (z) {
+    offsetMin = z[1] ? (z[1] === '-' ? -1 : 1) * (+z[2] * 60 + +(z[3] || 0)) : 0;
+    s = s.slice(0, z.index).trim();
+  }
+  s = s.replace(/(\d)T(\d)/i, '$1 $2').replace(/^(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s*/i, '');
+
+  // time: 14:30, 2:30:15.250, 2:30 PM, 9am
+  let h = 0, mi = 0, sec = 0, ms = 0, hasTime = false;
+  const tm = /(?:^|\s)(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,](\d{1,9}))?)?(?:\s*([ap])\.?m\.?)?(?=\s|$)/i.exec(s)
+    || /(?:^|\s)(\d{1,2})()()()\s*([ap])\.?m\.?(?=\s|$)/i.exec(s);
+  if (tm) {
+    hasTime = true;
+    h = +tm[1]; mi = +(tm[2] || 0); sec = +(tm[3] || 0); ms = +((tm[4] || '0').padEnd(3, '0').slice(0, 3));
+    if (tm[5]) {
+      if (h < 1 || h > 12) throw 'With AM/PM the hour must be 1–12';
+      h = (h % 12) + (/p/i.test(tm[5]) ? 12 : 0);
+    }
+    s = (s.slice(0, tm.index) + ' ' + s.slice(tm.index + tm[0].length)).trim().replace(/[,\s]+$/, '');
+  }
+
+  // date part
+  let y, mo, d, m;
+  const today = new Date();
+  const base = (offsetMin !== null || utc)
+    ? [today.getUTCFullYear(), today.getUTCMonth() + 1, today.getUTCDate()]
+    : [today.getFullYear(), today.getMonth() + 1, today.getDate()];
+  const rel = { today: 0, tomorrow: 1, yesterday: -1 };
+  const monthIdx = name => {
+    const i = H2D_MONTHS.indexOf(name.slice(0, 3).toLowerCase());
+    if (i < 0) throw `Unknown month "${name}"`;
+    return i + 1;
+  };
+  if (!s || s.toLowerCase() in rel) {
+    if (!s && !hasTime) throw 'Couldn\'t find a date or time';
+    const dt = new Date(Date.UTC(base[0], base[1] - 1, base[2] + (rel[s.toLowerCase()] || 0)));
+    [y, mo, d] = [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
+  } else if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s))) {
+    [y, mo, d] = [+m[1], +m[2], +m[3]];                                   // Y-M-D
+  } else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s))) {
+    [mo, d, y] = [+m[1], +m[2], +m[3]];                                   // M/D/Y (US)
+  } else if ((m = /^(\d{1,2})[-.](\d{1,2})[-.](\d{4})$/.exec(s))) {
+    [d, mo, y] = [+m[1], +m[2], +m[3]];                                   // D-M-Y / D.M.Y
+  } else if ((m = /^([a-z]{3,})\.?[ -](\d{1,2})(?:st|nd|rd|th)?,?[ -](\d{4})$/i.exec(s))) {
+    [mo, d, y] = [monthIdx(m[1]), +m[2], +m[3]];                          // Nov 16, 2026
+  } else if ((m = /^(\d{1,2})(?:st|nd|rd|th)?[ -]([a-z]{3,})\.?,?[ -](\d{4})$/i.exec(s))) {
+    [d, mo, y] = [+m[1], monthIdx(m[2]), +m[3]];                          // 16 Nov 2026
+  } else if ((m = /^(\d{4})[ -]([a-z]{3,})\.?[ -](\d{1,2})$/i.exec(s))) {
+    [y, mo, d] = [+m[1], monthIdx(m[2]), +m[3]];                          // 2026 Nov 16
+  } else {
+    throw `Couldn't understand "${raw.trim()}"`;
+  }
+  return h2dBuild(y, mo, d, h, mi, sec, ms, utc, offsetMin);
+}
+
+function h2dFromFields() {
+  const v = h2dFields.map(el => el.value.trim());
+  h2dFields.forEach(el => el.classList.remove('err'));
+  const bad = v.findIndex((x, i) => i < 3 ? !/^\d+$/.test(x) : x !== '' && !/^\d+$/.test(x));
+  if (bad >= 0) { h2dFields[bad].classList.add('err'); throw 'Year, month and day are required; use whole numbers'; }
+  const [y, mo, d, h, mi, s] = v.map(x => +(x || 0));
+  try { return h2dBuild(y, mo, d, h, mi, s, 0, h2dUtc(), null); }
+  catch (e) {
+    const i = mo < 1 || mo > 12 ? 1 : h > 23 ? 3 : mi > 59 ? 4 : s > 59 ? 5 : 2;
+    h2dFields[i].classList.add('err');
+    throw e;
+  }
+}
+
+const H2D_LABELS = { s: '→ Unix time', ms: '→ Milliseconds', iso: '→ ISO 8601', auto: '→ Unix time' };
+function h2dUpdateButtons() {
+  for (const id of ['h2dFieldsBtn', 'h2dTextBtn']) document.getElementById(id).textContent = H2D_LABELS[unixFormatSelect.value];
+}
+
+function h2dApply(getDate, srcEl) {
+  if (srcEl) srcEl.classList.remove('err');
+  let d;
+  try { d = getDate(); } catch (e) {
+    if (srcEl) srcEl.classList.add('err');
+    h2dHint.className = 'unix-h2d-hint bad';
+    h2dHint.textContent = String(e);
+    return;
+  }
+  const fmt = unixFormatSelect.value;
+  unixInput.value = fmt === 'ms' ? String(d.getTime())
+    : fmt === 'iso' ? d.toISOString().replace('.000Z', 'Z')
+    : String(Math.floor(d.getTime() / 1000));
+  updateUnixTime();
+  h2dHint.className = 'unix-h2d-hint ok';
+  h2dHint.textContent = '✓ ' + outLocal.value + '  =  ' + outUtc.value;
+}
+
+(function h2dInit() {
+  const n = new Date();
+  [n.getFullYear(), n.getMonth() + 1, n.getDate(), n.getHours(), n.getMinutes(), n.getSeconds()]
+    .forEach((v, i) => { h2dFields[i].value = i ? pad(v) : v; });
+  h2dUpdateButtons();
+})();
+document.getElementById('h2dFieldsBtn').onclick = () => h2dApply(h2dFromFields, null);
+document.getElementById('h2dTextBtn').onclick = () => h2dApply(() => h2dParse(h2dText.value, h2dUtc()), h2dText);
+h2dText.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('h2dTextBtn').click(); });
+for (const el of h2dFields) el.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('h2dFieldsBtn').click(); });
+h2dText.addEventListener('input', () => {
+  h2dText.classList.remove('err');
+  if (h2dHint.classList.contains('bad')) { h2dHint.className = 'unix-h2d-hint'; h2dHint.textContent = H2D_HINT; }
+});
+unixFormatSelect.addEventListener('change', h2dUpdateButtons);
+
 /* ---------------- JWT Debugger ---------------- */
 function b64urlToBytes(str) {
   let s = str.replace(/-/g, '+').replace(/_/g, '/');

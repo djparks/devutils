@@ -64,6 +64,29 @@
         </div>
         <div class="unix-tips">Tips: Mathematical operators + - * / are supported</div>
 
+        <div class="unix-h2d">
+          <div class="unix-h2d-head">
+            <span class="unix-label">Date to timestamp</span>
+            <label class="url-radio"><input type="radio" name="h2dZone" value="local" checked> Local time</label>
+            <label class="url-radio"><input type="radio" name="h2dZone" value="utc"> UTC</label>
+          </div>
+          <div class="unix-h2d-row">
+            <label class="unix-h2d-f">Year<input type="number" class="unix-input" id="h2dY"></label>
+            <label class="unix-h2d-f">Month<input type="number" class="unix-input" id="h2dMo" min="1" max="12"></label>
+            <label class="unix-h2d-f">Day<input type="number" class="unix-input" id="h2dD" min="1" max="31"></label>
+            <label class="unix-h2d-f">Hour<input type="number" class="unix-input" id="h2dH" min="0" max="23"></label>
+            <label class="unix-h2d-f">Min<input type="number" class="unix-input" id="h2dMi" min="0" max="59"></label>
+            <label class="unix-h2d-f">Sec<input type="number" class="unix-input" id="h2dS" min="0" max="59"></label>
+            <button class="btn unix-h2d-btn" id="h2dFieldsBtn"></button>
+          </div>
+          <div class="unix-h2d-row">
+            <input type="text" class="unix-input unix-h2d-text" id="h2dText" spellcheck="false" autocomplete="off"
+              placeholder="e.g. Nov 16 2026 2:30 PM · 16-11-2026 14:30 · 11/16/2026 · 2026-11-16T14:30Z · tomorrow 9am">
+            <button class="btn unix-h2d-btn" id="h2dTextBtn"></button>
+          </div>
+          <div class="unix-h2d-hint" id="h2dHint">Formats: Y-M-D, M/D/Y (US), D-M-Y or D.M.Y, month names, RFC 2822, ISO 8601, today / tomorrow / yesterday / now. A zone in the text (Z, UTC, GMT, +02:00) overrides Local/UTC.</div>
+        </div>
+
         <hr class="unix-divider">
 
         <div class="unix-grid">
