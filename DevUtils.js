@@ -1819,9 +1819,14 @@ const CM_CLASSES = [['Owner', 'u', 6], ['Group', 'g', 3], ['Public', 'o', 0]];
 const CM_PERMS = [['r', 4], ['w', 2], ['x', 1]];
 const CM_SPECIAL = [['cmSuid', 0o4000], ['cmSgid', 0o2000], ['cmSticky', 0o1000]];
 const CM_PRESETS = [
-  ['644', 'Regular file'], ['755', 'Executable / directory'], ['600', 'Private file'],
-  ['700', 'Private dir / script'], ['775', 'Group-writable'], ['777', 'Everyone (avoid)'],
-  ['400', 'Read-only (e.g. SSH key)'], ['1777', 'Shared dir like /tmp']
+  ['644', 'Regular file', 'Owner can read/write; everyone else can only read. The default for most files (configs, HTML, source code).'],
+  ['755', 'Executable / directory', 'Owner has full access; others can read and execute. Standard for scripts, binaries and directories (x on a directory lets you cd into it).'],
+  ['600', 'Private file', 'Only the owner can read/write; nobody else has any access. Use for secrets, .env files, ~/.ssh/config.'],
+  ['700', 'Private dir / script', 'Only the owner can read, write and execute. Use for private directories like ~/.ssh or personal scripts.'],
+  ['775', 'Group-writable', 'Owner and group have full access; others can read/execute. Handy for shared project dirs where a team shares a group.'],
+  ['777', 'Everyone (avoid)', 'Anyone can read, write and execute. Almost never correct and a security risk; prefer 775 or 755.'],
+  ['400', 'Read-only owner', 'Only the owner can read; no one can write. Required by ssh for private keys (e.g. AWS .pem files).'],
+  ['1777', 'Shared dir like /tmp', 'Everyone can create files, but the sticky bit (t) means only a file\'s owner can delete or rename it. Used for /tmp.']
 ];
 
 const cmNumeric = document.getElementById('cmNumeric');
@@ -1856,11 +1861,17 @@ cmGridBody.closest('table').querySelector('thead tr').insertAdjacentHTML('before
 for (const [id, bit] of CM_SPECIAL) cmBoxes.push({ el: document.getElementById(id), bit });
 
 const cmPresets = document.getElementById('cmPresets');
-for (const [mode, desc] of CM_PRESETS) {
+for (const [mode, name, desc] of CM_PRESETS) {
   const b = document.createElement('button');
-  b.className = 'btn nb-mini';
+  b.className = 'btn nb-mini cm-preset';
   b.textContent = mode;
-  b.title = desc;
+  const tip = document.createElement('span');
+  tip.className = 'cm-tip';
+  tip.innerHTML = '<b></b><code></code><span></span>';
+  tip.querySelector('b').textContent = name;
+  tip.querySelector('code').textContent = cmToSymbolic(parseInt(mode, 8));
+  tip.querySelector('span').textContent = desc;
+  b.appendChild(tip);
   b.onclick = () => { cmMode = parseInt(mode, 8); runCm(); };
   cmPresets.appendChild(b);
 }
