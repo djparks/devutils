@@ -583,6 +583,51 @@
         </section>
       </div>
 
+      <!-- Cron Expression Tool View -->
+      <div class="url-tool nb-tool cr-tool" id="crTool" style="display:none">
+        <div class="cr-top">
+          <div class="cr-seg" id="crFormat">
+            <button data-fmt="linux">Linux crontab</button>
+            <button data-fmt="quartz">Quartz</button>
+            <button data-fmt="spring">Spring @Scheduled</button>
+          </div>
+          <span class="cr-fmt-hint" id="crFmtHint"></span>
+        </div>
+        <section class="dc-card cr-main">
+          <div class="nb-field"><input type="text" class="nb-input cr-expr" id="crExpr" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"><button class="btn" id="crCopy">📋 Copy</button></div>
+          <div class="cr-chips" id="crChips"></div>
+          <div class="cr-desc" id="crDesc"></div>
+          <div class="cr-notice" id="crNotice"></div>
+        </section>
+        <div class="dc-cards">
+          <section class="dc-card cr-builder-card">
+            <h3 class="dc-title">Build it</h3>
+            <div class="cr-builder" id="crBuilder"></div>
+          </section>
+          <section class="dc-card">
+            <div class="cr-head"><h3 class="dc-title">Next runs</h3><label class="url-radio"><input type="checkbox" id="crUtc"> UTC</label></div>
+            <div class="cr-tz" id="crTz"></div>
+            <ol class="cr-next" id="crNext"></ol>
+          </section>
+        </div>
+        <div class="dc-cards">
+          <section class="dc-card">
+            <h3 class="dc-title">Same schedule in the other formats</h3>
+            <div class="cm-cmd-list" id="crEquiv"></div>
+          </section>
+          <section class="dc-card">
+            <h3 class="dc-title">Common schedules</h3>
+            <div class="cr-presets" id="crPresets"></div>
+          </section>
+        </div>
+        <section class="dc-card cm-cmds">
+          <h3 class="dc-title">Field reference</h3>
+          <table class="cr-ref" id="crRef"></table>
+          <div class="cr-legend" id="crLegend"></div>
+          <ul class="cr-diff" id="crDiff"></ul>
+        </section>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

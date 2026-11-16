@@ -4,7 +4,7 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
-  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds']
+  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -43,6 +43,7 @@ function selectTool(name) {
   const hgToolEl = document.getElementById('hgTool');
   const cmToolEl = document.getElementById('cmTool');
   const msToolEl = document.getElementById('msTool');
+  const crToolEl = document.getElementById('crTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -56,6 +57,7 @@ function selectTool(name) {
   hgToolEl.style.display = 'none';
   cmToolEl.style.display = 'none';
   msToolEl.style.display = 'none';
+  crToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -92,6 +94,9 @@ function selectTool(name) {
   } else if (name === 'Milliseconds to Seconds') {
     msToolEl.style.display = 'flex';
     runMs();
+  } else if (name === 'Cron Expression') {
+    crToolEl.style.display = 'flex';
+    runCr();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -2174,6 +2179,785 @@ for (const [label, v] of [['500ms', 500], ['1s', 1000], ['30s', 30000], ['90s', 
   b.onclick = () => { msValue = v; runMs(); };
   msPresets.appendChild(b);
 }
+
+/* ---------------- Cron Expression ---------------- */
+// Internally day-of-week is always 0-6 (Sunday = 0) and months 1-12, whatever the source format.
+const CR_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const CR_MON = MONTHS.map(m => m.toUpperCase());
+const CR_FIELDS = {
+  sec: { label: 'Second', min: 0, max: 59, unit: 'second' },
+  min: { label: 'Minute', min: 0, max: 59, unit: 'minute' },
+  hour: { label: 'Hour', min: 0, max: 23, unit: 'hour' },
+  dom: { label: 'Day of month', min: 1, max: 31, unit: 'day' },
+  month: { label: 'Month', min: 1, max: 12, unit: 'month' },
+  dow: { label: 'Day of week', min: 0, max: 6, unit: 'day' },
+  year: { label: 'Year', min: 1970, max: 2099, unit: 'year' }
+};
+const CR_FORMATS = {
+  linux: {
+    name: 'Linux crontab', fields: ['min', 'hour', 'dom', 'month', 'dow'], dowRaw: [0, 7], q: false, specials: false, orDays: true,
+    hint: '5 fields: minute hour day-of-month month day-of-week',
+    macros: { '@yearly': '0 0 1 1 *', '@annually': '0 0 1 1 *', '@monthly': '0 0 1 * *', '@weekly': '0 0 * * 0', '@daily': '0 0 * * *', '@midnight': '0 0 * * *', '@hourly': '0 * * * *' }
+  },
+  quartz: {
+    name: 'Quartz', fields: ['sec', 'min', 'hour', 'dom', 'month', 'dow', 'year'], dowRaw: [1, 7], q: true, specials: true, orDays: false,
+    hint: '6–7 fields: second minute hour day-of-month month day-of-week [year]', macros: null
+  },
+  spring: {
+    name: 'Spring', fields: ['sec', 'min', 'hour', 'dom', 'month', 'dow'], dowRaw: [0, 7], q: true, specials: true, orDays: false,
+    hint: '6 fields: second minute hour day-of-month month day-of-week',
+    macros: { '@yearly': '0 0 0 1 1 *', '@annually': '0 0 0 1 1 *', '@monthly': '0 0 0 1 * *', '@weekly': '0 0 0 * * 0', '@daily': '0 0 0 * * *', '@midnight': '0 0 0 * * *', '@hourly': '0 0 * * * *' }
+  }
+};
+const CR_DEFAULTS = { linux: '*/15 9-17 * * 1-5', quartz: '0 */15 9-17 ? * MON-FRI', spring: '0 */15 9-17 * * MON-FRI' };
+// Presets are written in Spring syntax (a superset) and converted to the active format; ones that can't convert are hidden.
+const CR_PRESETS = [
+  ['Every minute', '0 * * * * *'], ['Every 30 seconds', '*/30 * * * * *'], ['Every 5 minutes', '0 */5 * * * *'],
+  ['Every 15 minutes', '0 */15 * * * *'], ['Every hour, on the hour', '0 0 * * * *'], ['Every 2 hours', '0 0 */2 * * *'],
+  ['Every day at midnight', '0 0 0 * * *'], ['Every day at 09:00', '0 0 9 * * *'], ['Weekdays at 09:00', '0 0 9 * * MON-FRI'],
+  ['Every 15 min, business hours', '0 */15 9-17 * * MON-FRI'], ['Every Sunday at midnight', '0 0 0 * * SUN'],
+  ['1st of every month', '0 0 0 1 * *'], ['Every quarter', '0 0 0 1 */3 *'], ['Once a year (Jan 1)', '0 0 0 1 1 *'],
+  ['Last day of the month', '0 0 0 L * *'], ['Last weekday of the month', '0 0 18 LW * *'],
+  ['Last Friday of the month', '0 0 17 * * FRIL'], ['2nd Monday of the month', '0 0 9 * * MON#2']
+];
+
+const crDowToInternal = (fmt, raw) => fmt === 'quartz' ? raw - 1 : raw % 7;
+const crDowToRaw = (fmt, i) => fmt === 'quartz' ? i + 1 : i;
+const crDowTok = (fmt, i) => fmt === 'linux' ? String(i) : CR_DOW[i];
+const crIsSpecial = it => ['L', 'LW', 'W', 'lastDow', 'nth'].includes(it.k);
+const crFree = tok => tok === '*' || tok === '?';
+
+// Parses one field into { any, q, star, items, set }. Throws a readable message on error.
+function crParseField(tok, key, fmt) {
+  const F = CR_FIELDS[key], FM = CR_FORMATS[fmt];
+  const [lo, hi] = key === 'dow' ? FM.dowRaw : [F.min, F.max];
+  const toI = raw => key === 'dow' ? crDowToInternal(fmt, raw) : raw;
+  const ast = { tok, key, any: false, q: false, star: tok.startsWith('*'), items: [], set: new Set() };
+  if (tok === '?') {
+    if (!FM.q) throw 'Linux cron doesn\'t support "?" (use *)';
+    if (key !== 'dom' && key !== 'dow') throw '"?" is only allowed in day-of-month or day-of-week';
+    ast.any = ast.q = true;
+    return ast;
+  }
+  if (tok === '*') {
+    ast.any = true;
+    for (let v = lo; v <= hi; v++) ast.set.add(toI(v));
+    return ast;
+  }
+  const val = s => {
+    if (/^\d+$/.test(s)) {
+      const n = +s;
+      if (n < lo || n > hi) throw `${s} is out of range (${lo}–${hi})`;
+      return n;
+    }
+    const u = s.toUpperCase();
+    if (key === 'month' && CR_MON.includes(u)) return CR_MON.indexOf(u) + 1;
+    if (key === 'dow' && CR_DOW.includes(u)) return crDowToRaw(fmt, CR_DOW.indexOf(u));
+    throw `"${s}" isn't a valid ${F.label.toLowerCase()}`;
+  };
+  for (const part of tok.split(',')) {
+    if (!part) throw 'empty value in list';
+    let m;
+    if (FM.specials && key === 'dom') {
+      if ((m = /^L(?:-(\d+))?$/i.exec(part))) {
+        const off = +(m[1] || 0);
+        if (off > 30) throw 'L-n offset must be 0–30';
+        ast.items.push({ k: 'L', off });
+        continue;
+      }
+      if (/^LW$/i.test(part)) { ast.items.push({ k: 'LW' }); continue; }
+      if ((m = /^(\d+)W$/i.exec(part))) { ast.items.push({ k: 'W', day: val(m[1]) }); continue; }
+    }
+    if (FM.specials && key === 'dow') {
+      if (fmt === 'quartz' && /^L$/i.test(part)) { ast.items.push({ k: 'v', a: 6 }); ast.set.add(6); continue; }
+      if ((m = /^(\w+?)L$/i.exec(part))) { ast.items.push({ k: 'lastDow', d: toI(val(m[1])) }); continue; }
+      if ((m = /^(\w+)#(\d+)$/i.exec(part))) {
+        if (+m[2] < 1 || +m[2] > 5) throw '# must be followed by 1–5 (e.g. MON#2)';
+        ast.items.push({ k: 'nth', d: toI(val(m[1])), n: +m[2] });
+        continue;
+      }
+    }
+    m = /^(?:(\*)|(\w+)(?:-(\w+))?)(?:\/(\d+))?$/.exec(part);
+    if (!m) throw `can't understand "${part}"`;
+    const step = m[4] === undefined ? 1 : +m[4];
+    if (step < 1) throw 'step must be at least 1';
+    let a, b, k;
+    if (m[1]) { a = lo; b = hi; k = 'all'; }
+    else {
+      a = val(m[2]);
+      b = m[3] !== undefined ? val(m[3]) : m[4] !== undefined ? hi : a;
+      k = m[3] !== undefined ? 'range' : m[4] !== undefined ? 'from' : 'v';
+    }
+    if (a > b) throw `range "${part}" goes backwards`;
+    for (let v = a; v <= b; v += step) ast.set.add(toI(v));
+    ast.items.push({ k, a: toI(a), b: toI(b), step });
+  }
+  if (ast.items.length > 1 && ast.items.some(crIsSpecial)) throw 'L, W and # can\'t be combined with other values';
+  return ast;
+}
+
+function crParse(expr, fmt) {
+  const FM = CR_FORMATS[fmt];
+  let text = expr.trim(), macro = null;
+  if (!text) return { fmt, err: 'Enter a cron expression' };
+  if (text.startsWith('@')) {
+    const low = text.toLowerCase();
+    if (low === '@reboot') return { fmt, err: '@reboot runs once at startup; it has no repeating schedule' };
+    if (!FM.macros || !FM.macros[low]) {
+      return { fmt, err: `${FM.name} doesn't support ${text}` + (FM.macros ? ' (try @yearly, @monthly, @weekly, @daily or @hourly)' : '') };
+    }
+    macro = low;
+    text = FM.macros[low];
+  }
+  const toks = text.split(/\s+/);
+  const ok = fmt === 'quartz' ? toks.length === 6 || toks.length === 7 : toks.length === FM.fields.length;
+  if (!ok) {
+    const names = FM.fields.map(k => CR_FIELDS[k].label.toLowerCase());
+    if (fmt === 'quartz') names[6] = '[year]';
+    let tip = '';
+    if (fmt === 'linux' && toks.length === 6) tip = ' Looks like it has a seconds field; switch to Quartz or Spring above.';
+    if (fmt !== 'linux' && toks.length === 5) tip = ' Looks like a Linux expression (no seconds); switch to Linux crontab above.';
+    return { fmt, toks, err: `${FM.name} expressions have ${fmt === 'quartz' ? '6 or 7' : FM.fields.length} fields (${names.join(', ')}); found ${toks.length}.${tip}` };
+  }
+  const f = {}, tokens = {}, fieldErr = {};
+  FM.fields.forEach((k, i) => {
+    const t = toks[i] ?? '*';
+    tokens[k] = t;
+    try { f[k] = crParseField(t, k, fmt); } catch (e) { fieldErr[k] = String(e); }
+  });
+  if (fmt === 'quartz' && f.dom && f.dow) {
+    if (f.dom.q && f.dow.q) fieldErr.dow = 'Quartz allows "?" in only one of day-of-month / day-of-week';
+    else if (!f.dom.q && !f.dow.q) {
+      fieldErr[f.dow.any ? 'dow' : 'dom'] = 'Quartz needs "?" in exactly one of day-of-month or day-of-week, e.g. "0 0 12 * * ?" or "0 0 12 ? * MON"';
+    }
+  }
+  const errs = Object.entries(fieldErr);
+  return {
+    fmt, f, tokens, toks, macro, fieldErr,
+    err: errs.length ? errs.map(([k, e]) => CR_FIELDS[k].label + ': ' + e).join(' · ') : null
+  };
+}
+
+/* --- matching & next run times --- */
+const crDaysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+const crWd = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+function crNearestWeekday(y, m, n, last) {
+  if (n > last) return -1;
+  const w = crWd(y, m, n);
+  if (w === 6) return n === 1 ? 3 : n - 1;
+  if (w === 0) return n === last ? n - 2 : n + 1;
+  return n;
+}
+function crDomMatch(ast, y, m, d, last) {
+  if (ast.set.has(d)) return true;
+  for (const it of ast.items) {
+    if (it.k === 'L' && d === last - it.off) return true;
+    if (it.k === 'LW') { const w = crWd(y, m, last); if (d === (w === 6 ? last - 1 : w === 0 ? last - 2 : last)) return true; }
+    if (it.k === 'W' && d === crNearestWeekday(y, m, it.day, last)) return true;
+  }
+  return false;
+}
+function crDowMatch(ast, d, wd, last) {
+  if (ast.set.has(wd)) return true;
+  return ast.items.some(it =>
+    (it.k === 'lastDow' && it.d === wd && d + 7 > last) || (it.k === 'nth' && it.d === wd && Math.ceil(d / 7) === it.n));
+}
+function crDayMatch(p, y, m, d, wd, last) {
+  const { dom, dow } = p.f;
+  const a = dom.any || crDomMatch(dom, y, m, d, last);
+  const b = dow.any || crDowMatch(dow, d, wd, last);
+  // Linux quirk: if neither day field starts with "*", the job runs when EITHER matches
+  return CR_FORMATS[p.fmt].orDays && !dom.star && !dow.star ? a || b : a && b;
+}
+function crNext(p, from, count, utc) {
+  const out = [];
+  const sorted = ast => [...ast.set].sort((x, y) => x - y);
+  const secs = p.f.sec ? sorted(p.f.sec) : [0], mins = sorted(p.f.min), hours = sorted(p.f.hour);
+  const years = p.f.year && !p.f.year.any ? p.f.year.set : null;
+  let y = utc ? from.getUTCFullYear() : from.getFullYear();
+  let m = (utc ? from.getUTCMonth() : from.getMonth()) + 1;
+  let d = utc ? from.getUTCDate() : from.getDate();
+  let wd = crWd(y, m, d), last = crDaysIn(y, m);
+  const endY = y + 30;
+  while (y <= endY) {
+    if (years && !years.has(y)) {
+      y++; m = 1; d = 1; wd = crWd(y, 1, 1); last = 31;
+      continue;
+    }
+    if (p.f.month.set.has(m) && crDayMatch(p, y, m, d, wd, last)) {
+      for (const h of hours) for (const mi of mins) for (const s of secs) {
+        const t = utc ? new Date(Date.UTC(y, m - 1, d, h, mi, s)) : new Date(y, m - 1, d, h, mi, s);
+        if (t <= from) continue;
+        if (!utc && (t.getHours() !== h || t.getMinutes() !== mi)) continue; // skipped by a DST change
+        out.push(t);
+        if (out.length >= count) return out;
+      }
+    }
+    d++; wd = (wd + 1) % 7;
+    if (d > last) { d = 1; m++; if (m > 12) { m = 1; y++; } last = crDaysIn(y, m); }
+  }
+  return out;
+}
+
+/* --- plain-English description --- */
+const crOrd = n => ['first', 'second', 'third', 'fourth', 'fifth'][n - 1];
+const crJoin = arr => arr.length <= 1 ? (arr[0] || '') : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1];
+const crHM = (h, m, s) => pad(h) + ':' + pad(m) + (s === undefined ? '' : ':' + pad(s));
+const crValName = (key, v) => key === 'month' ? MONTHS_FULL[v - 1] : key === 'dow' ? DAYS_FULL[v] : String(v);
+const crPlural = (n, u) => n === 1 ? u : n + ' ' + u + 's';
+
+function crItemText(it, key) {
+  const n = v => crValName(key, v);
+  switch (it.k) {
+    case 'v': return n(it.a);
+    case 'range': return n(it.a) + ' through ' + n(it.b) + (it.step > 1 ? ` (every ${it.step})` : '');
+    case 'from': return `every ${it.step} starting at ${n(it.a)}`;
+    case 'all': return `every ${it.step}`;
+    case 'L': return it.off ? `the ${it.off + 1}${crSuffix(it.off + 1)}-to-last day of the month` : 'the last day of the month';
+    case 'LW': return 'the last weekday (Mon–Fri) of the month';
+    case 'W': return `the weekday (Mon–Fri) nearest the ${it.day}${crSuffix(it.day)}`;
+    case 'lastDow': return `the last ${DAYS_FULL[it.d]} of the month`;
+    case 'nth': return `the ${crOrd(it.n)} ${DAYS_FULL[it.d]} of the month`;
+  }
+}
+const crSuffix = n => (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+
+function crUnitPhrase(ast, key) {
+  const u = CR_FIELDS[key].unit;
+  if (ast.any) return 'every ' + u;
+  const its = ast.items;
+  if (its.length === 1) {
+    const it = its[0];
+    if (it.k === 'all') return 'every ' + crPlural(it.step, u);
+    if (it.k === 'v') return `at ${u} ${it.a}`;
+    if (it.k === 'from') return `every ${crPlural(it.step, u)} starting at ${u} ${it.a}`;
+    if (it.k === 'range') return `every ${crPlural(it.step, u)} from ${it.a} through ${it.b}`;
+  }
+  return `at ${u}s ` + crJoin(its.map(it => crItemText(it, key)));
+}
+
+function crTimePhrase(f) {
+  const simple = a => a && !a.any && a.items.every(i => i.k === 'v');
+  const vals = a => [...a.set].sort((x, y) => x - y);
+  const secZero = !f.sec || (simple(f.sec) && f.sec.set.size === 1 && f.sec.set.has(0));
+  if (simple(f.min) && simple(f.hour) && (secZero || simple(f.sec))) {
+    const ss = secZero ? [undefined] : vals(f.sec);
+    if (f.min.set.size * f.hour.set.size * ss.length <= 6) {
+      const times = [];
+      for (const h of vals(f.hour)) for (const m of vals(f.min)) for (const s of ss) times.push(crHM(h, m, s));
+      return 'at ' + crJoin(times);
+    }
+  }
+  const parts = [];
+  if (!secZero) parts.push(crUnitPhrase(f.sec, 'sec'));
+  if (secZero || !f.min.any) parts.push(crUnitPhrase(f.min, 'min'));
+  const h = f.hour;
+  if (h.any) {
+    if (simple(f.min) && f.min.set.size === 1 && secZero) parts[parts.length - 1] += ' past every hour';
+  } else if (h.items.length === 1 && h.items[0].k === 'all') {
+    parts.push('every ' + crPlural(h.items[0].step, 'hour'));
+  } else if (h.items.length === 1 && h.items[0].k === 'range' && h.items[0].step === 1) {
+    parts.push(`between ${crHM(h.items[0].a, 0)} and ${crHM(h.items[0].b, 59)}`);
+  } else if (simple(h)) {
+    parts.push(h.set.size === 1 ? `between ${crHM(vals(h)[0], 0)} and ${crHM(vals(h)[0], 59)}`
+      : 'during the ' + crJoin(vals(h).map(x => crHM(x, 0))) + ' hours');
+  } else {
+    parts.push('past hours ' + crJoin(h.items.map(it => crItemText(it, 'hour'))));
+  }
+  return parts.join(', ');
+}
+
+function crDomPhrase(ast) {
+  const its = ast.items;
+  if (its.length === 1) {
+    const it = its[0];
+    if (it.k === 'all') return 'every ' + crPlural(it.step, 'day');
+    if (it.k === 'from') return `every ${crPlural(it.step, 'day')} starting on the ${it.a}${crSuffix(it.a)}`;
+    if (it.k === 'range') return it.step === 1 ? `on days ${it.a} through ${it.b} of the month` : `every ${crPlural(it.step, 'day')} from day ${it.a} through ${it.b}`;
+    if (crIsSpecial(it)) return 'on ' + crItemText(it, 'dom');
+  }
+  if (its.every(i => i.k === 'v')) return 'on day ' + crJoin(its.map(i => String(i.a))) + ' of the month';
+  return 'on days ' + crJoin(its.map(it => crItemText(it, 'dom'))) + ' of the month';
+}
+
+function crListPhrase(ast, key, prefix) {
+  const its = ast.items;
+  const U = key === 'month' ? 'month' : 'year';
+  if (its.length === 1 && its[0].k === 'all') return 'every ' + crPlural(its[0].step, U);
+  if (its.length === 1 && its[0].k === 'from') return `every ${crPlural(its[0].step, U)} starting in ${crValName(key, its[0].a)}`;
+  return prefix + crJoin(its.map(it => crItemText(it, key)));
+}
+
+function crDescribe(p) {
+  const f = p.f;
+  const out = [crTimePhrase(f)];
+  const domP = f.dom.any ? '' : crDomPhrase(f.dom);
+  const dowP = f.dow.any ? '' : 'on ' + crJoin(f.dow.items.map(it => it.k === 'all' && it.step > 1
+    ? `every ${it.step}${crSuffix(it.step)} day of the week` : crItemText(it, 'dow')));
+  if (domP && dowP) {
+    out.push(CR_FORMATS[p.fmt].orDays && !f.dom.star && !f.dow.star ? `${domP} OR ${dowP}` : `${domP}, but only ${dowP}`);
+  } else if (domP || dowP) out.push(domP || dowP);
+  if (!f.month.any) out.push(crListPhrase(f.month, 'month', 'only in '));
+  if (f.year && !f.year.any) out.push(crListPhrase(f.year, 'year', 'in '));
+  const s = out.filter(Boolean).join(', ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* --- conversion between formats --- */
+function crCompress(vals, fmtVal) {
+  const v = [...vals].sort((a, b) => a - b), out = [];
+  for (let i = 0; i < v.length;) {
+    let j = i;
+    while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++;
+    if (j - i >= 2) out.push(fmtVal(v[i]) + '-' + fmtVal(v[j]));
+    else for (let k = i; k <= j; k++) out.push(fmtVal(v[k]));
+    i = j + 1;
+  }
+  return out.join(',');
+}
+// Vixie cron doesn't accept "5/15"; it needs "5-59/15"
+const crLinuxSteps = (tok, max) => tok.split(',').map(s => s.replace(/^(\d+)\/(\d+)$/, `$1-${max}/$2`)).join(',');
+
+function crConvert(p, to) {
+  const T = CR_FORMATS[to], f = p.f, t = p.tokens, lin = to === 'linux';
+  const out = {};
+  if (T.fields.includes('sec')) out.sec = t.sec ?? '0';
+  else if (t.sec !== undefined && t.sec !== '0') return { err: `Linux cron can't schedule seconds (seconds field is "${t.sec}")` };
+  if (t.year !== undefined && t.year !== '*') {
+    if (!T.fields.includes('year')) return { err: `${T.name} has no year field (year is "${t.year}")` };
+    out.year = t.year;
+  }
+  out.min = lin ? crLinuxSteps(t.min, 59) : t.min;
+  out.hour = lin ? crLinuxSteps(t.hour, 23) : t.hour;
+  out.month = crFree(t.month) ? '*' : lin && /[a-z]/i.test(t.month) ? crCompress(f.month.set, String) : lin ? crLinuxSteps(t.month, 12) : t.month;
+  if (lin && (f.dom.items.some(crIsSpecial) || f.dow.items.some(crIsSpecial))) {
+    return { err: 'Linux cron has no L, W or # (last day, nearest weekday, nth weekday)' };
+  }
+  let dom = crFree(t.dom) ? '*' : lin ? crLinuxSteps(t.dom, 31) : t.dom;
+  let dow = '*';
+  if (!crFree(t.dow)) {
+    const special = f.dow.items.filter(crIsSpecial).map(it => CR_DOW[it.d] + (it.k === 'lastDow' ? 'L' : '#' + it.n));
+    dow = special.length ? special.join(',') : f.dow.set.size === 7 ? '*' : crCompress(f.dow.set, i => crDowTok(to, i));
+  }
+  const domR = !crFree(dom), dowR = !crFree(dow);
+  if (domR && dowR) {
+    const srcOr = CR_FORMATS[p.fmt].orDays && !f.dom.star && !f.dow.star;
+    if (srcOr && !lin) return { err: `Linux runs when EITHER the day-of-month OR the day-of-week matches; ${T.name} needs both to match, so it can't be expressed exactly` };
+    if (!srcOr && lin && !dom.startsWith('*') && !dow.startsWith('*')) return { err: 'This needs BOTH day-of-month and day-of-week to match; Linux would run when either one matches' };
+    if (to === 'quartz') return { err: 'Quartz can\'t restrict both day-of-month and day-of-week (one of them must be "?")' };
+  }
+  if (to === 'quartz') {
+    if (!domR && !dowR) { dom = '*'; dow = '?'; }
+    else if (domR) dow = '?';
+    else dom = '?';
+  }
+  out.dom = dom;
+  out.dow = dow;
+  return { expr: T.fields.filter(k => out[k] !== undefined).map(k => out[k]).join(' ') };
+}
+
+/* --- UI --- */
+const crExpr = document.getElementById('crExpr');
+const crChips = document.getElementById('crChips');
+const crDesc = document.getElementById('crDesc');
+const crNotice = document.getElementById('crNotice');
+const crBuilder = document.getElementById('crBuilder');
+const crNextEl = document.getElementById('crNext');
+const crUtc = document.getElementById('crUtc');
+const crEquiv = document.getElementById('crEquiv');
+let crFmt = 'linux';
+let crRows = {}; // key -> { el, st, token }
+
+function crSelect(options, value, onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'select';
+  const sel = document.createElement('select');
+  for (const [v, label] of options) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = String(value);
+  sel.onchange = () => onChange(sel.value);
+  wrap.appendChild(sel);
+  wrap.insertAdjacentHTML('beforeend', '<span class="chev">▲<br>▼</span>');
+  return wrap;
+}
+function crValueOptions(key) {
+  const F = CR_FIELDS[key], opts = [];
+  if (key === 'year') {
+    const y0 = new Date().getFullYear();
+    for (let y = y0; y <= Math.min(y0 + 30, F.max); y++) opts.push([y, String(y)]);
+    return opts;
+  }
+  for (let v = F.min; v <= F.max; v++) {
+    opts.push([v, key === 'month' ? MONTHS[v - 1] : key === 'dow' ? DAYS[v] : key === 'hour' ? pad(v) + ':00' : String(v)]);
+  }
+  return opts;
+}
+function crModes(key) {
+  const FM = CR_FORMATS[crFmt];
+  const every = { sec: 'Every second', min: 'Every minute', hour: 'Every hour', dom: 'Every day', month: 'Every month', dow: 'Any day of the week', year: 'Every year' };
+  const u = CR_FIELDS[key].unit;
+  if (key === 'year') return [['every', every.year], ['range', 'Range of years'], ['custom', 'Custom…']];
+  const modes = [['every', every[key]]];
+  if (key !== 'dow') modes.push(['step', `Every N ${u}s…`]);
+  modes.push(['specific', key === 'dow' ? 'Specific days…' : `Specific ${u}s…`], ['range', 'Range…']);
+  if (FM.specials && key === 'dom') modes.push(['last', 'Last day of the month'], ['lastWeekday', 'Last weekday of the month'], ['nearest', 'Weekday nearest day…']);
+  if (FM.specials && key === 'dow') modes.push(['lastDow', 'Last … of the month'], ['nth', 'Nth … of the month']);
+  modes.push(['custom', 'Custom…']);
+  return modes;
+}
+
+function crTokenToState(tok, key) {
+  const F = CR_FIELDS[key], y0 = new Date().getFullYear();
+  const st = {
+    mode: 'custom', custom: tok, n: key === 'sec' || key === 'min' ? 15 : 2, a: key === 'year' ? y0 : F.min,
+    b: key === 'year' ? y0 + 1 : key === 'dow' ? 5 : F.max, sel: new Set(), d: 5, nth: 1, day: 15
+  };
+  if (key === 'dow') st.a = 1;
+  if (crFree(tok)) { st.mode = 'every'; return st; }
+  let ast;
+  try { ast = crParseField(tok, key, crFmt); } catch { return st; }
+  const its = ast.items, it = its[0];
+  if (key !== 'year') st.sel = new Set(ast.set); // so switching to "Specific" keeps the current values
+  if (its.length === 1) {
+    if (key !== 'dow' && key !== 'year' && (it.k === 'all' || it.k === 'from' || (it.k === 'range' && it.step > 1 && it.b === F.max))) {
+      return Object.assign(st, { mode: 'step', n: it.step, a: it.k === 'all' ? F.min : it.a });
+    }
+    if (it.k === 'range' && it.step === 1 && it.a <= it.b) return Object.assign(st, { mode: 'range', a: it.a, b: it.b });
+    if (it.k === 'L' && !it.off) return Object.assign(st, { mode: 'last' });
+    if (it.k === 'LW') return Object.assign(st, { mode: 'lastWeekday' });
+    if (it.k === 'W') return Object.assign(st, { mode: 'nearest', day: it.day });
+    if (it.k === 'lastDow') return Object.assign(st, { mode: 'lastDow', d: it.d });
+    if (it.k === 'nth') return Object.assign(st, { mode: 'nth', d: it.d, nth: it.n });
+  }
+  if (key !== 'year' && its.every(i => i.k === 'v' || (i.k === 'range' && i.step === 1))) {
+    return Object.assign(st, { mode: 'specific', sel: new Set(ast.set) });
+  }
+  return st;
+}
+
+function crStateToken(st, key) {
+  const F = CR_FIELDS[key], lin = crFmt === 'linux';
+  const v = x => key === 'dow' ? crDowTok(crFmt, x) : String(x);
+  switch (st.mode) {
+    case 'every': return '*';
+    case 'step': return (+st.a === F.min ? '*' : lin ? `${st.a}-${F.max}` : String(st.a)) + '/' + st.n;
+    case 'specific': return st.sel.size ? crCompress(st.sel, v) : '*';
+    case 'range': {
+      const [a, b] = +st.a <= +st.b ? [+st.a, +st.b] : [+st.b, +st.a];
+      return a === b ? v(a) : v(a) + '-' + v(b);
+    }
+    case 'last': return 'L';
+    case 'lastWeekday': return 'LW';
+    case 'nearest': return st.day + 'W';
+    case 'lastDow': return CR_DOW[st.d] + 'L';
+    case 'nth': return CR_DOW[st.d] + '#' + st.nth;
+    default: return st.custom.trim() || '*';
+  }
+}
+
+function crRenderControls(r) {
+  const { key, st } = r, ctl = r.el.querySelector('.cr-ctl');
+  ctl.innerHTML = '';
+  const F = CR_FIELDS[key];
+  const set = (prop, val) => { st[prop] = val; crFromBuilder(key); };
+  const text = s => ctl.appendChild(document.createTextNode(s));
+  const valSel = prop => crSelect(crValueOptions(key), st[prop], v => set(prop, +v));
+  const dowSel = () => crSelect(DAYS_FULL.map((n, i) => [i, n]), st.d, v => set('d', +v));
+  switch (st.mode) {
+    case 'every':
+      ctl.appendChild(Object.assign(document.createElement('span'), { textContent: '*' }));
+      break;
+    case 'step': {
+      const nOpts = [];
+      for (let i = 1; i <= Math.min(F.max - F.min, 59); i++) nOpts.push([i, String(i)]);
+      text('every');
+      ctl.appendChild(crSelect(nOpts, st.n, v => set('n', +v)));
+      text(F.unit + '(s), starting at');
+      ctl.appendChild(valSel('a'));
+      break;
+    }
+    case 'specific': {
+      const pick = document.createElement('div');
+      pick.className = 'cr-pick';
+      for (const [v, label] of crValueOptions(key)) {
+        const b = document.createElement('button');
+        b.textContent = key === 'hour' ? pad(v) : label;
+        b.classList.toggle('on', st.sel.has(v));
+        b.onclick = () => {
+          st.sel.has(v) ? st.sel.delete(v) : st.sel.add(v);
+          b.classList.toggle('on', st.sel.has(v));
+          crFromBuilder(key);
+        };
+        pick.appendChild(b);
+      }
+      ctl.appendChild(pick);
+      break;
+    }
+    case 'range':
+      text('from');
+      ctl.appendChild(valSel('a'));
+      text('through');
+      ctl.appendChild(valSel('b'));
+      break;
+    case 'nearest': {
+      const days = [];
+      for (let i = 1; i <= 31; i++) days.push([i, i + crSuffix(i)]);
+      text('nearest weekday to the');
+      ctl.appendChild(crSelect(days, st.day, v => set('day', +v)));
+      break;
+    }
+    case 'lastDow':
+      text('the last');
+      ctl.appendChild(dowSel());
+      text('of the month');
+      break;
+    case 'nth':
+      text('the');
+      ctl.appendChild(crSelect([1, 2, 3, 4, 5].map(n => [n, crOrd(n)]), st.nth, v => set('nth', +v)));
+      ctl.appendChild(dowSel());
+      text('of the month');
+      break;
+    case 'custom': {
+      const inp = document.createElement('input');
+      inp.className = 'nb-input';
+      inp.value = st.custom;
+      inp.spellcheck = false;
+      inp.placeholder = 'e.g. 1,15 or 5-20/5';
+      inp.oninput = () => { st.custom = inp.value; crFromBuilder(key); };
+      ctl.appendChild(inp);
+      break;
+    }
+  }
+}
+
+function crRenderRow(key, tok) {
+  const r = crRows[key];
+  r.token = tok;
+  r.st = crTokenToState(tok, key);
+  const modeWrap = r.el.querySelector('.cr-mode');
+  modeWrap.innerHTML = '';
+  modeWrap.appendChild(crSelect(crModes(key), r.st.mode, mode => {
+    r.st.mode = mode;
+    if (mode === 'specific' && !r.st.sel.size) r.st.sel.add(key === 'dow' ? 1 : CR_FIELDS[key].min);
+    if (mode === 'custom') r.st.custom = r.token;
+    crRenderControls(r);
+    crFromBuilder(key);
+  }));
+  crRenderControls(r);
+}
+
+function crBuildRows(tokens) {
+  crBuilder.innerHTML = '';
+  crRows = {};
+  for (const key of CR_FORMATS[crFmt].fields) {
+    const el = document.createElement('div');
+    el.className = 'cr-brow';
+    el.innerHTML = '<span class="nb-label"></span><div class="cr-mode"></div><div class="cr-ctl"></div>';
+    el.querySelector('.nb-label').textContent = CR_FIELDS[key].label + (key === 'year' ? ' (optional)' : '');
+    crBuilder.appendChild(el);
+    crRows[key] = { key, el };
+    crRenderRow(key, tokens[key] ?? '*');
+  }
+}
+
+// A builder control changed: rebuild that field's token, apply Quartz's "?" rule, and rewrite the expression.
+function crFromBuilder(key) {
+  const r = crRows[key];
+  r.token = crStateToken(r.st, key);
+  if (crFmt === 'quartz' && (key === 'dom' || key === 'dow')) {
+    const other = crRows[key === 'dom' ? 'dow' : 'dom'];
+    const setOther = tok => { if (other.token !== tok) crRenderRow(other.key, tok); };
+    if (r.st.mode === 'every') {
+      if (!crFree(other.token)) r.token = '?';
+      else if (key === 'dom') { r.token = '*'; setOther('?'); }
+      else { r.token = '?'; setOther('*'); }
+    } else setOther('?');
+  }
+  const toks = CR_FORMATS[crFmt].fields.map(k => crRows[k].token);
+  if (crFmt === 'quartz' && toks[6] === '*') toks.pop();
+  crExpr.value = toks.join(' ');
+  crNotice.textContent = '';
+  runCr();
+}
+
+function crFmtDate(t, utc) {
+  const g = utc
+    ? [t.getUTCDay(), t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), t.getUTCHours(), t.getUTCMinutes(), t.getUTCSeconds()]
+    : [t.getDay(), t.getFullYear(), t.getMonth(), t.getDate(), t.getHours(), t.getMinutes(), t.getSeconds()];
+  const secs = crFmt === 'linux' ? '' : ':' + pad(g[6]);
+  return `${DAYS[g[0]]} ${g[1]}-${pad(g[2] + 1)}-${pad(g[3])} ${pad(g[4])}:${pad(g[5])}${secs}`;
+}
+function crRel(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `in ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `in ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `in ${h} h` + (m % 60 ? ` ${m % 60} min` : '');
+  const d = Math.floor(h / 24);
+  if (d < 60) return `in ${d} days`;
+  if (d < 730) return `in ~${Math.round(d / 30.44)} months`;
+  return `in ~${Math.round(d / 365.25)} years`;
+}
+
+function runCr() {
+  const p = crParse(crExpr.value, crFmt);
+  crExpr.classList.toggle('err', !!p.err);
+
+  crChips.innerHTML = '';
+  if (p.tokens) {
+    for (const key of CR_FORMATS[crFmt].fields) {
+      if (key === 'year' && p.toks.length < 7) continue;
+      const chip = document.createElement('div');
+      chip.className = 'cr-chip' + (p.fieldErr[key] ? ' err' : '');
+      chip.title = p.fieldErr[key] || 'Click to edit in the builder';
+      chip.innerHTML = '<b></b><span></span>';
+      chip.querySelector('b').textContent = p.tokens[key];
+      chip.querySelector('span').textContent = CR_FIELDS[key].label;
+      chip.onclick = () => {
+        const row = crRows[key].el;
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 700);
+      };
+      crChips.appendChild(chip);
+    }
+    for (const key of CR_FORMATS[crFmt].fields) {
+      if (crRows[key] && crRows[key].token !== p.tokens[key]) crRenderRow(key, p.tokens[key]);
+    }
+  }
+
+  crEquiv.innerHTML = '';
+  crNextEl.innerHTML = '';
+  if (p.err) {
+    crDesc.className = 'cr-desc bad';
+    crDesc.textContent = p.err;
+    crNextEl.innerHTML = '<li class="none">Fix the expression to see run times.</li>';
+    return;
+  }
+  crDesc.className = 'cr-desc';
+  crDesc.textContent = crDescribe(p) + '.';
+  const sub = [];
+  if (p.macro) sub.push(`${p.macro} is shorthand for "${CR_FORMATS[crFmt].macros[p.macro]}".`);
+  if (CR_FORMATS[crFmt].orDays && !p.f.dom.star && !p.f.dow.star) {
+    sub.push('Note: in Linux cron, when both day-of-month and day-of-week are set, the job runs when EITHER one matches.');
+  }
+  if (sub.length) crDesc.insertAdjacentHTML('beforeend', '<small>' + esc(sub.join(' ')) + '</small>');
+
+  const utc = crUtc.checked, now = new Date();
+  document.getElementById('crTz').textContent = 'Times in ' + (utc ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone + ' (your local time zone)');
+  const runs = crNext(p, now, 10, utc);
+  if (!runs.length) crNextEl.innerHTML = '<li class="none">Never runs in the next 30 years (e.g. 30 February or a past year).</li>';
+  for (const t of runs) {
+    const li = document.createElement('li');
+    li.innerHTML = '<span></span><em></em>';
+    li.querySelector('span').textContent = crFmtDate(t, utc);
+    li.querySelector('em').textContent = crRel(t - now);
+    crNextEl.appendChild(li);
+  }
+
+  for (const to of Object.keys(CR_FORMATS)) {
+    if (to === crFmt) continue;
+    const c = crConvert(p, to);
+    const row = document.createElement('div');
+    row.className = 'cm-cmd';
+    row.innerHTML = '<span class="nb-label"></span><code></code>';
+    row.querySelector('.nb-label').textContent = CR_FORMATS[to].name;
+    const code = row.querySelector('code');
+    if (c.expr) {
+      code.textContent = c.expr;
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = '📋 Copy';
+      b.onclick = () => copyText(c.expr, b);
+      row.appendChild(b);
+    } else {
+      code.textContent = 'Not expressible: ' + c.err;
+      code.style.color = 'var(--text-muted)';
+      code.style.whiteSpace = 'normal';
+    }
+    crEquiv.appendChild(row);
+  }
+}
+
+function crRenderStatic() {
+  const FM = CR_FORMATS[crFmt];
+  document.querySelectorAll('#crFormat button').forEach(b => b.classList.toggle('on', b.dataset.fmt === crFmt));
+  document.getElementById('crFmtHint').textContent = FM.hint;
+  crExpr.placeholder = CR_DEFAULTS[crFmt];
+
+  const presets = document.getElementById('crPresets');
+  presets.innerHTML = '';
+  for (const [label, spring] of CR_PRESETS) {
+    const expr = crFmt === 'spring' ? spring : crConvert(crParse(spring, 'spring'), crFmt).expr;
+    if (!expr) continue;
+    const b = document.createElement('button');
+    b.innerHTML = '<span></span><code></code>';
+    b.querySelector('span').textContent = label;
+    b.querySelector('code').textContent = expr;
+    b.onclick = () => { crExpr.value = expr; crNotice.textContent = ''; runCr(); };
+    presets.appendChild(b);
+  }
+
+  const dowAllowed = {
+    linux: '<code>0-7</code> or <code>SUN-SAT</code> (0 and 7 = Sunday)',
+    quartz: '<code>1-7</code> or <code>SUN-SAT</code> (<b>1 = Sunday</b>, 2 = Monday)',
+    spring: '<code>0-7</code> or <code>SUN-SAT</code> (0 and 7 = Sunday)'
+  }[crFmt];
+  const base = '<code>* , - /</code>';
+  const ref = {
+    sec: ['<code>0-59</code>', base], min: ['<code>0-59</code>', base], hour: ['<code>0-23</code>', base],
+    dom: ['<code>1-31</code>', FM.specials ? '<code>* , - / ? L W</code>' : base],
+    month: ['<code>1-12</code> or <code>JAN-DEC</code>', base],
+    dow: [dowAllowed, FM.specials ? '<code>* , - / ? L #</code>' : base],
+    year: ['empty or <code>1970-2099</code>', base]
+  };
+  document.getElementById('crRef').innerHTML = '<tr><th>Field</th><th>Allowed values</th><th>Special characters</th></tr>' +
+    FM.fields.map(k => `<tr><td>${CR_FIELDS[k].label}</td><td>${ref[k][0]}</td><td>${ref[k][1]}</td></tr>`).join('');
+
+  const legend = [['*', 'any value'], [',', 'list (1,15)'], ['-', 'range (9-17)'], ['/', 'step (*/15)']];
+  if (FM.specials) legend.push(['?', 'no specific value'], ['L', 'last (day / weekday of month)'], ['W', 'nearest weekday'], ['#', 'nth weekday (MON#2)']);
+  if (FM.macros) legend.push(['@daily', '@hourly, @weekly, @monthly, @yearly shortcuts']);
+  document.getElementById('crLegend').innerHTML = legend.map(([c, d]) => `<span><code>${esc(c)}</code> ${esc(d)}</span>`).join('');
+
+  const diffs = {
+    linux: '<b>Linux crontab:</b> 5 fields, no seconds. Day-of-week 0-7 (0 and 7 = Sunday). If both day-of-month and day-of-week are set, it runs when <b>either</b> matches. Names can\'t be used in lists or ranges on many systems, so numbers are safest.',
+    quartz: '<b>Quartz:</b> 6 or 7 fields, seconds first, optional year at the end. Day-of-week is <b>1-7 with 1 = Sunday</b>. Exactly one of day-of-month / day-of-week must be <code>?</code>. Supports L, W and #.',
+    spring: '<b>Spring</b> (<code>@Scheduled(cron = …)</code>, Spring 5.3+): 6 fields, seconds first, no year. Day-of-week is 0-7 like Linux (0 and 7 = Sunday), not like Quartz. <code>?</code> is optional. Supports L, W, # and @daily-style macros. Both day fields must match.'
+  };
+  document.getElementById('crDiff').innerHTML = Object.entries(diffs).map(([k, html]) => `<li class="${k === crFmt ? 'cur' : ''}">${html}</li>`).join('');
+}
+
+function crSetFormat(fmt) {
+  if (fmt === crFmt) return;
+  const p = crParse(crExpr.value, crFmt);
+  let expr = null, why = '';
+  if (!p.err) {
+    const c = crConvert(p, fmt);
+    expr = c.expr;
+    why = c.err;
+  }
+  const from = CR_FORMATS[crFmt].name;
+  crFmt = fmt;
+  crNotice.textContent = expr ? '' : `Couldn't convert from ${from}${why ? ': ' + why : ''}. Loaded an example instead.`;
+  crExpr.value = expr || CR_DEFAULTS[fmt];
+  const p2 = crParse(crExpr.value, fmt);
+  crBuildRows(p2.tokens || {});
+  crRenderStatic();
+  runCr();
+}
+
+document.querySelectorAll('#crFormat button').forEach(b => { b.onclick = () => crSetFormat(b.dataset.fmt); });
+crExpr.addEventListener('input', () => { crNotice.textContent = ''; runCr(); });
+crUtc.addEventListener('change', runCr);
+document.getElementById('crCopy').onclick = e => copyText(crExpr.value.trim(), e.currentTarget);
+crExpr.value = CR_DEFAULTS.linux;
+crBuildRows(crParse(crExpr.value, 'linux').tokens);
+crRenderStatic();
 
 /* boot with Unix Time Converter */
 selectTool('Unix Time Converter');
