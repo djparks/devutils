@@ -380,6 +380,19 @@
   }
   @media (max-width:700px){.cm-cmd{grid-template-columns:minmax(0,1fr) auto}.cm-cmd .nb-label{grid-column:1/-1}}
 
+  /* milliseconds converter */
+  .ms-snip{display:flex;flex-direction:column;gap:6px}
+  .ms-snip-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .ms-snip-head .nb-label{font-size:13px;color:var(--text-dim)}
+  .ms-snip pre{
+    margin:0;font:13px/1.55 var(--mono);color:var(--text);padding:10px 12px;border-radius:6px;overflow-x:auto;
+    background:var(--field-bg);border:1px solid var(--border);
+  }
+  .ms-snip pre .c{color:var(--text-muted)}
+  .ms-snip pre .k{color:var(--j-bool)}
+  .ms-snip pre .n{color:var(--j-num)}
+  .ms-note{font-size:13px;color:var(--text-dim);margin:0}
+
   /* yaml <-> json tool */
   .url-tool.side-by-side{flex-direction:row}
   .url-tool.side-by-side .url-pane{flex:1 1 0;min-width:0}

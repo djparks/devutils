@@ -4,7 +4,7 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
-  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator']
+  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -42,6 +42,7 @@ function selectTool(name) {
   const dcToolEl = document.getElementById('dcTool');
   const hgToolEl = document.getElementById('hgTool');
   const cmToolEl = document.getElementById('cmTool');
+  const msToolEl = document.getElementById('msTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -54,6 +55,7 @@ function selectTool(name) {
   dcToolEl.style.display = 'none';
   hgToolEl.style.display = 'none';
   cmToolEl.style.display = 'none';
+  msToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -87,6 +89,9 @@ function selectTool(name) {
   } else if (name === 'Chmod Calculator') {
     cmToolEl.style.display = 'flex';
     runCm();
+  } else if (name === 'Milliseconds to Seconds') {
+    msToolEl.style.display = 'flex';
+    runMs();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -2007,6 +2012,158 @@ cmFrom.addEventListener('input', () => runCm());
 document.querySelectorAll('[data-cm-copy]').forEach(b => {
   b.onclick = () => copyText(document.getElementById(b.dataset.cmCopy).value, b);
 });
+
+/* ---------------- Milliseconds to Seconds ---------------- */
+const msMillis = document.getElementById('msMillis');
+const msSeconds = document.getElementById('msSeconds');
+const msInfo = document.getElementById('msInfo');
+const msJava = document.getElementById('msJava');
+let msValue = 300000;
+
+const MS_ONES = ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
+  'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+const MS_TENS = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+const MS_SCALES = [[1e12, 'TRILLION'], [1e9, 'BILLION'], [1e6, 'MILLION'], [1e3, 'THOUSAND']];
+
+// 1234 -> ONE_THOUSAND_TWO_HUNDRED_THIRTY_FOUR (Java identifiers can't start with a digit)
+function msWords(n) {
+  if (n < 20) return MS_ONES[n];
+  if (n < 100) return MS_TENS[Math.floor(n / 10)] + (n % 10 ? '_' + MS_ONES[n % 10] : '');
+  if (n < 1000) return MS_ONES[Math.floor(n / 100)] + '_HUNDRED' + (n % 100 ? '_' + msWords(n % 100) : '');
+  for (const [v, w] of MS_SCALES) {
+    if (n >= v) return msWords(Math.floor(n / v)) + '_' + w + (n % v ? '_' + msWords(n % v) : '');
+  }
+}
+
+const msGroup = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '_'); // 300000 -> 300_000
+const msTrim = (whole, frac, digits) => {
+  const f = String(frac).padStart(digits, '0').replace(/0+$/, '');
+  return whole + (f ? '.' + f : '');
+};
+const msDec = (ms, unit) => {
+  const v = ms / unit;
+  return Number.isInteger(v) ? String(v) : v.toFixed(6).replace(/0+$/, '');
+};
+
+// Matches java.time.Duration#toString (hours are not rolled into days)
+function msIso(ms) {
+  if (ms === 0) return 'PT0S';
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60, f = ms % 1000;
+  return 'PT' + (h ? h + 'H' : '') + (m ? m + 'M' : '') + (s || f ? msTrim(s, f, 3) + 'S' : '');
+}
+
+function msHuman(ms) {
+  if (ms === 0) return '0ms';
+  const parts = [[86400000, 'd'], [3600000, 'h'], [60000, 'm'], [1000, 's'], [1, 'ms']];
+  const out = [];
+  for (const [v, u] of parts) { const q = Math.floor(ms / v); ms %= v; if (q) out.push(q + u); }
+  return out.join(' ');
+}
+
+// Picks the largest exact unit (days, hours, minutes, seconds, else millis) for the Duration factory + constant name
+function msUnit(ms) {
+  if (ms === 0) return { n: 0, name: 'ZERO', factory: 'Duration.ZERO', tu: 'SECONDS' };
+  const pick = (n, word, method, tu) => ({
+    n, name: msWords(n) + '_' + (n === 1 ? word.slice(0, -1) : word),
+    factory: 'Duration.' + method + '(' + msGroup(n) + ')', tu
+  });
+  if (ms % 86400000 === 0) return pick(ms / 86400000, 'DAYS', 'ofDays', 'DAYS');
+  if (ms % 3600000 === 0) return pick(ms / 3600000, 'HOURS', 'ofHours', 'HOURS');
+  if (ms % 60000 === 0) return pick(ms / 60000, 'MINUTES', 'ofMinutes', 'MINUTES');
+  if (ms % 1000 === 0) return pick(ms / 1000, 'SECONDS', 'ofSeconds', 'SECONDS');
+  return pick(ms, 'MILLISECONDS', 'ofMillis', 'MILLISECONDS');
+}
+
+function msHighlight(code) {
+  return code.split('\n').map(line => {
+    const i = line.indexOf('//');
+    const src = i < 0 ? line : line.slice(0, i);
+    const body = esc(src).replace(/\b(import|private|static|final|long|new)\b|\b(\d[\d_]*L?)\b/g,
+      (_, kw, num) => kw ? '<span class="k">' + kw + '</span>' : '<span class="n">' + num + '</span>');
+    return body + (i < 0 ? '' : '<span class="c">' + esc(line.slice(i)) + '</span>');
+  }).join('\n');
+}
+
+function msRow(parent, label, text) {
+  const row = document.createElement('div');
+  row.className = 'cm-cmd';
+  row.innerHTML = '<span class="nb-label"></span><code></code><button class="btn">📋 Copy</button>';
+  row.querySelector('.nb-label').textContent = label;
+  row.querySelector('code').textContent = text;
+  row.querySelector('button').onclick = e => copyText(text, e.currentTarget);
+  parent.appendChild(row);
+}
+
+function msSnippet(label, code) {
+  const box = document.createElement('div');
+  box.className = 'ms-snip';
+  box.innerHTML = '<div class="ms-snip-head"><span class="nb-label"></span><button class="btn nb-mini">📋 Copy</button></div><pre></pre>';
+  box.querySelector('.nb-label').textContent = label;
+  box.querySelector('pre').innerHTML = msHighlight(code);
+  box.querySelector('button').onclick = e => copyText(code, e.currentTarget);
+  msJava.appendChild(box);
+}
+
+function runMs(skip) {
+  const ms = msValue;
+  if (skip !== msMillis) { msMillis.value = String(ms); msMillis.classList.remove('err'); }
+  if (skip !== msSeconds) { msSeconds.value = msTrim(Math.floor(ms / 1000), ms % 1000, 3); msSeconds.classList.remove('err'); }
+
+  msInfo.innerHTML = '';
+  msRow(msInfo, 'Minutes', msDec(ms, 60000));
+  msRow(msInfo, 'Hours', msDec(ms, 3600000));
+  msRow(msInfo, 'Days', msDec(ms, 86400000));
+  msRow(msInfo, 'Readable', msHuman(ms));
+  msRow(msInfo, 'ISO-8601', msIso(ms));
+
+  const u = msUnit(ms);
+  const tuExpr = ms === 0 ? '0L' : 'TimeUnit.' + u.tu + '.toMillis(' + msGroup(u.n) + ')';
+  msJava.innerHTML = '';
+  msSnippet('Constant — java.time.Duration (recommended, Java 8+)',
+    'import java.time.Duration;\n\n' +
+    'private static final Duration ' + u.name + ' = ' + u.factory + ';');
+  msSnippet('Using it',
+    'Thread.sleep(' + u.name + ');  // Java 19+ accepts a Duration\n' +
+    'HttpClient.newBuilder().connectTimeout(' + u.name + ');\n' +
+    'long millis = ' + u.name + '.toMillis();  // ' + msGroup(ms) + ' — for APIs that still take a long');
+  msSnippet('When you need a long (legacy APIs)',
+    'private static final long ' + u.name + '_MS = ' + (ms === 0 ? '0L' : u.factory + '.toMillis()') + ';  // ' + msGroup(ms) + '\n' +
+    '// or: ' + tuExpr);
+  const note = document.createElement('p');
+  note.className = 'ms-note';
+  note.textContent = 'Prefer passing a Duration over a raw long: the unit travels with the value, so there\'s no ' +
+    '"was that seconds or millis?" bug. Avoid magic numbers like 300000; if you must write a literal, use underscores (' +
+    msGroup(ms) + 'L).';
+  msJava.appendChild(note);
+}
+
+function msParse(input) {
+  const t = input.value.trim().replace(/[_,\s]/g, '');
+  if (input === msMillis) return /^\d+$/.test(t) && Number.isSafeInteger(+t) ? +t : null;
+  const m = /^(\d+)(?:\.(\d{1,3}))?$/.exec(t);
+  if (!m) return null;
+  const ms = +m[1] * 1000 + +(m[2] || '0').padEnd(3, '0');
+  return Number.isSafeInteger(ms) ? ms : null;
+}
+
+for (const input of [msMillis, msSeconds]) input.addEventListener('input', () => {
+  const v = msParse(input);
+  input.classList.toggle('err', v === null);
+  if (v === null) return;
+  msValue = v;
+  runMs(input);
+});
+document.querySelectorAll('[data-ms-copy]').forEach(b => {
+  b.onclick = () => copyText(document.getElementById(b.dataset.msCopy).value, b);
+});
+const msPresets = document.getElementById('msPresets');
+for (const [label, v] of [['500ms', 500], ['1s', 1000], ['30s', 30000], ['90s', 90000], ['5m', 300000], ['1h', 3600000], ['1d', 86400000]]) {
+  const b = document.createElement('button');
+  b.className = 'btn nb-mini';
+  b.textContent = label;
+  b.onclick = () => { msValue = v; runMs(); };
+  msPresets.appendChild(b);
+}
 
 /* boot with Unix Time Converter */
 selectTool('Unix Time Converter');
