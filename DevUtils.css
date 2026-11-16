@@ -111,13 +111,21 @@
     margin-bottom:2px;transition:background .15s ease,color .15s ease;
   }
   .nav-item .ico{
-    width:22px;flex:none;text-align:center;font:600 12px var(--mono);color:var(--text-muted);
+    width:28px;height:28px;flex:none;display:grid;place-items:center;text-align:center;
+    font:600 12px var(--mono);color:var(--text-dim);
+    background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.12);border-radius:6px;
   }
   .nav-item.active{
     background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
     color:var(--sel-text);font-weight:500;box-shadow:0 4px 14px var(--accent-glow);
   }
-  .nav-item.active .ico{color:#fff}
+  .nav-item.active .ico{
+    color:#fff;
+    background:rgba(255,255,255,0.2);border-color:rgba(255,255,255,0.25);
+  }
+  .nav-item:not(.active):hover .ico{
+    color:var(--text);background:rgba(148,163,184,0.14);border-color:rgba(148,163,184,0.2);
+  }
   .nav-item:not(.active):hover{background:rgba(255,255,255,0.06);color:var(--text)}
   .sidebar-foot{padding:10px 12px 4px;text-align:center;border-top:1px solid var(--border)}
   .version{text-align:center;font-size:12px;font-weight:600;color:var(--text-muted);letter-spacing:0.5px}
