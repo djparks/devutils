@@ -516,6 +516,44 @@
         </section>
       </div>
 
+      <!-- Chmod Calculator Tool View -->
+      <div class="url-tool nb-tool cm-tool" id="cmTool" style="display:none">
+        <p class="nb-intro">Tick permissions, or type a numeric (755, 4755) or symbolic (rwxr-xr-x) mode. Everything else updates automatically.</p>
+        <div class="dc-cards">
+          <section class="dc-card">
+            <h3 class="dc-title">Permissions</h3>
+            <table class="cm-grid">
+              <thead><tr><th></th><th>Read</th><th>Write</th><th>Execute</th></tr></thead>
+              <tbody id="cmGridBody"></tbody>
+            </table>
+            <div class="cm-specials">
+              <span class="nb-label">Special:</span>
+              <label class="url-radio" title="Run as file owner (4000)"><input type="checkbox" id="cmSuid"> setuid</label>
+              <label class="url-radio" title="Run as file group / inherit dir group (2000)"><input type="checkbox" id="cmSgid"> setgid</label>
+              <label class="url-radio" title="Only owner can delete entries in dir (1000)"><input type="checkbox" id="cmSticky"> sticky</label>
+            </div>
+            <div class="cm-presets" id="cmPresets"><span class="nb-label">Presets:</span></div>
+          </section>
+          <section class="dc-card">
+            <h3 class="dc-title">Mode</h3>
+            <div class="dc-grid cm-fields">
+              <label class="nb-label" for="cmNumeric">Numeric</label>
+              <div class="nb-field"><input type="text" class="nb-input" id="cmNumeric" spellcheck="false" autocomplete="off"><button class="btn" data-cm-copy="cmNumeric">📋 Copy</button></div>
+              <label class="nb-label" for="cmSymbolic">Symbolic</label>
+              <div class="nb-field"><input type="text" class="nb-input" id="cmSymbolic" spellcheck="false" autocomplete="off"><button class="btn" data-cm-copy="cmSymbolic">📋 Copy</button></div>
+              <label class="nb-label" for="cmFile">File</label>
+              <input type="text" class="nb-input" id="cmFile" value="file" spellcheck="false" autocomplete="off">
+              <label class="nb-label" for="cmFrom" title="Starting mode used to build the relative (+x / -w) command">Current</label>
+              <div class="nb-field"><input type="text" class="nb-input" id="cmFrom" value="644" spellcheck="false" autocomplete="off"><span class="cm-hint" id="cmFromSym"></span></div>
+            </div>
+          </section>
+        </div>
+        <section class="dc-card cm-cmds">
+          <h3 class="dc-title">Commands</h3>
+          <div class="cm-cmd-list" id="cmCmds"></div>
+        </section>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

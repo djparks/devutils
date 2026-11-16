@@ -345,6 +345,29 @@
   .dc-line{font-size:13px;color:var(--text-dim);margin-top:4px}
   .dc-result.bad .dc-big{color:#f87171;font-size:14px}
 
+  /* chmod calculator */
+  .cm-grid{border-collapse:collapse;width:100%;font-size:14px}
+  .cm-grid th,.cm-grid td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)}
+  .cm-grid thead th{font-weight:500;color:var(--text-dim);font-size:13px}
+  .cm-grid tbody th{text-align:left;font-weight:500;color:var(--text)}
+  .cm-grid tbody th small{color:var(--text-muted);font:12px var(--mono);margin-left:6px}
+  .cm-grid input{accent-color:var(--accent);width:17px;height:17px;margin:0;cursor:pointer}
+  .cm-grid td.cm-oct{font:600 14px var(--mono);color:var(--j-num)}
+  .cm-specials,.cm-presets{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .cm-presets{gap:8px}
+  .cm-fields{grid-template-columns:80px minmax(0,1fr)}
+  .cm-fields .nb-input{flex:1;min-width:0;font-family:var(--mono)}
+  .cm-hint{font:13px var(--mono);color:var(--text-dim);white-space:nowrap}
+  .cm-cmds{flex:none}
+  .cm-cmd-list{display:flex;flex-direction:column;gap:10px}
+  .cm-cmd{display:grid;grid-template-columns:150px minmax(0,1fr) auto;align-items:center;gap:10px}
+  .cm-cmd .nb-label{font-size:13px;color:var(--text-dim)}
+  .cm-cmd code{
+    font:13px var(--mono);color:var(--j-str);padding:8px 10px;border-radius:6px;overflow-x:auto;white-space:nowrap;
+    background:var(--field-bg);border:1px solid var(--border);
+  }
+  @media (max-width:700px){.cm-cmd{grid-template-columns:minmax(0,1fr) auto}.cm-cmd .nb-label{grid-column:1/-1}}
+
   /* yaml <-> json tool */
   .url-tool.side-by-side{flex-direction:row}
   .url-tool.side-by-side .url-pane{flex:1 1 0;min-width:0}

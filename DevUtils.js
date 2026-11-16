@@ -4,7 +4,7 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['⇄','YAML to JSON'], ['⇄','JSON to YAML'], ['⇄','YAML to Property'], ['⇄','Property to YAML'], ['01','Number Base Converter'],
-  ['📅','Date Calculator'], ['#','Hash Generator']
+  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -41,6 +41,7 @@ function selectTool(name) {
   const nbToolEl = document.getElementById('nbTool');
   const dcToolEl = document.getElementById('dcTool');
   const hgToolEl = document.getElementById('hgTool');
+  const cmToolEl = document.getElementById('cmTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -52,6 +53,7 @@ function selectTool(name) {
   nbToolEl.style.display = 'none';
   dcToolEl.style.display = 'none';
   hgToolEl.style.display = 'none';
+  cmToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -82,6 +84,9 @@ function selectTool(name) {
   } else if (name === 'Hash Generator') {
     hgToolEl.style.display = 'flex';
     runHg();
+  } else if (name === 'Chmod Calculator') {
+    cmToolEl.style.display = 'flex';
+    runCm();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -1806,6 +1811,190 @@ hgFileInput.addEventListener('change', async () => {
   hgInput.value = '';
   hgInput.placeholder = 'File loaded: ' + file.name + ' (type here to hash text instead)';
   runHg();
+});
+
+/* ---------------- Chmod Calculator ---------------- */
+// mode is a 12-bit number: special(suid=4,sgid=2,sticky=1) << 9 | owner << 6 | group << 3 | other
+const CM_CLASSES = [['Owner', 'u', 6], ['Group', 'g', 3], ['Public', 'o', 0]];
+const CM_PERMS = [['r', 4], ['w', 2], ['x', 1]];
+const CM_SPECIAL = [['cmSuid', 0o4000], ['cmSgid', 0o2000], ['cmSticky', 0o1000]];
+const CM_PRESETS = [
+  ['644', 'Regular file'], ['755', 'Executable / directory'], ['600', 'Private file'],
+  ['700', 'Private dir / script'], ['775', 'Group-writable'], ['777', 'Everyone (avoid)'],
+  ['400', 'Read-only (e.g. SSH key)'], ['1777', 'Shared dir like /tmp']
+];
+
+const cmNumeric = document.getElementById('cmNumeric');
+const cmSymbolic = document.getElementById('cmSymbolic');
+const cmFile = document.getElementById('cmFile');
+const cmFrom = document.getElementById('cmFrom');
+const cmFromSym = document.getElementById('cmFromSym');
+const cmCmds = document.getElementById('cmCmds');
+const cmGridBody = document.getElementById('cmGridBody');
+let cmMode = 0o755;
+
+const cmBoxes = []; // [{el, bit}]
+const cmOctCells = [];
+for (const [label, letter, shift] of CM_CLASSES) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<th>' + label + '<small>(' + letter + ')</small></th>';
+  for (const [, v] of CM_PERMS) {
+    const td = document.createElement('td');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cmBoxes.push({ el: cb, bit: v << shift });
+    td.appendChild(cb);
+    tr.appendChild(td);
+  }
+  const oct = document.createElement('td');
+  oct.className = 'cm-oct';
+  tr.appendChild(oct);
+  cmOctCells.push([oct, shift]);
+  cmGridBody.appendChild(tr);
+}
+cmGridBody.closest('table').querySelector('thead tr').insertAdjacentHTML('beforeend', '<th>Octal</th>');
+for (const [id, bit] of CM_SPECIAL) cmBoxes.push({ el: document.getElementById(id), bit });
+
+const cmPresets = document.getElementById('cmPresets');
+for (const [mode, desc] of CM_PRESETS) {
+  const b = document.createElement('button');
+  b.className = 'btn nb-mini';
+  b.textContent = mode;
+  b.title = desc;
+  b.onclick = () => { cmMode = parseInt(mode, 8); runCm(); };
+  cmPresets.appendChild(b);
+}
+
+function cmToSymbolic(m) {
+  let s = '';
+  for (const [, letter, shift] of CM_CLASSES) {
+    const bits = (m >> shift) & 7;
+    s += bits & 4 ? 'r' : '-';
+    s += bits & 2 ? 'w' : '-';
+    const x = bits & 1;
+    const special = letter === 'u' ? m & 0o4000 : letter === 'g' ? m & 0o2000 : m & 0o1000;
+    const ch = letter === 'o' ? 't' : 's';
+    s += special ? (x ? ch : ch.toUpperCase()) : (x ? 'x' : '-');
+  }
+  return s;
+}
+
+// Accepts octal (1-4 digits) or symbolic (9 chars, optional leading type char like ls -l). Returns null if invalid.
+function cmParse(text) {
+  const t = text.trim();
+  if (/^[0-7]{1,4}$/.test(t)) return parseInt(t, 8);
+  const m = /^[-dlbcps]?([r-][w-][xsS-][r-][w-][xsS-][r-][w-][xtT-])$/.exec(t);
+  if (!m) return null;
+  const s = m[1];
+  let mode = 0;
+  CM_CLASSES.forEach(([, , shift], i) => {
+    const [r, w, x] = s.slice(i * 3, i * 3 + 3);
+    if (r === 'r') mode |= 4 << shift;
+    if (w === 'w') mode |= 2 << shift;
+    if ('xst'.includes(x)) mode |= 1 << shift;
+    if ('sStT'.includes(x)) mode |= [0o4000, 0o2000, 0o1000][i];
+  });
+  return mode;
+}
+
+const cmOctal = m => (m & 0o7000 ? (m >> 9).toString() : '') + ((m >> 6) & 7) + ((m >> 3) & 7) + (m & 7);
+
+// chmod u=rwx,g=rx,o=rx  (absolute symbolic)
+function cmAbsolute(m) {
+  const parts = CM_CLASSES.map(([, letter, shift]) => {
+    const bits = (m >> shift) & 7;
+    let p = CM_PERMS.filter(([, v]) => bits & v).map(([c]) => c).join('');
+    if (letter === 'u' && m & 0o4000) p += 's';
+    if (letter === 'g' && m & 0o2000) p += 's';
+    if (letter === 'o' && m & 0o1000) p += 't';
+    return [letter, p];
+  });
+  // collapse classes with identical perms (e.g. u=rwx,go=rx or a=rwx)
+  const groups = new Map();
+  for (const [letter, p] of parts) groups.set(p, (groups.get(p) || '') + letter);
+  return [...groups].map(([p, who]) => (who === 'ugo' ? 'a' : who) + '=' + p).join(',');
+}
+
+// chmod u+x,go-w  (relative change from `from` to `to`); returns '' if no change
+function cmRelative(from, to) {
+  const ops = { '+': [], '-': [] };
+  for (const [, letter, shift] of CM_CLASSES) {
+    const special = letter === 'u' ? 0o4000 : letter === 'g' ? 0o2000 : 0o1000;
+    const sch = letter === 'o' ? 't' : 's';
+    for (const [op, a, b] of [['+', to, from], ['-', from, to]]) {
+      let p = CM_PERMS.filter(([, v]) => ((a >> shift) & v) && !((b >> shift) & v)).map(([c]) => c).join('');
+      if ((a & special) && !(b & special)) p += sch;
+      if (p) ops[op].push([letter, p]);
+    }
+  }
+  const out = [];
+  for (const op of ['+', '-']) {
+    const groups = new Map();
+    for (const [letter, p] of ops[op]) groups.set(p, (groups.get(p) || '') + letter);
+    for (const [p, who] of groups) out.push((who === 'ugo' ? 'a' : who) + op + p);
+  }
+  return out.join(',');
+}
+
+const cmQuote = f => /^[\w./@%+=:,-]+$/.test(f) ? f : "'" + f.replace(/'/g, "'\\''") + "'";
+
+function runCm(skip) {
+  for (const { el, bit } of cmBoxes) el.checked = !!(cmMode & bit);
+  for (const [cell, shift] of cmOctCells) cell.textContent = (cmMode >> shift) & 7;
+  if (skip !== cmNumeric) { cmNumeric.value = cmOctal(cmMode); cmNumeric.classList.remove('err'); }
+  if (skip !== cmSymbolic) { cmSymbolic.value = cmToSymbolic(cmMode); cmSymbolic.classList.remove('err'); }
+
+  const file = cmQuote(cmFile.value.trim() || 'file');
+  const from = cmParse(cmFrom.value);
+  cmFrom.classList.toggle('err', from === null);
+  cmFromSym.textContent = from === null ? 'invalid' : cmToSymbolic(from);
+
+  const rel = from === null ? null : cmRelative(from, cmMode);
+  const rows = [
+    ['Numeric', 'chmod ' + cmOctal(cmMode) + ' ' + file],
+    ['Symbolic (=)', 'chmod ' + cmAbsolute(cmMode) + ' ' + file],
+    ['Relative (+/-)', rel === null ? null : rel ? 'chmod ' + rel + ' ' + file : null,
+      rel === null ? 'Enter a valid current mode' : 'No change from current mode'],
+    ['Recursive', 'chmod -R ' + cmOctal(cmMode) + ' ' + file],
+    ['ls -l', '-' + cmToSymbolic(cmMode)]
+  ];
+  cmCmds.innerHTML = '';
+  for (const [label, cmd, msg] of rows) {
+    const row = document.createElement('div');
+    row.className = 'cm-cmd';
+    row.innerHTML = '<span class="nb-label"></span><code></code>';
+    row.querySelector('.nb-label').textContent = label;
+    row.querySelector('code').textContent = cmd || msg;
+    if (cmd) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = '📋 Copy';
+      b.onclick = () => copyText(cmd, b);
+      row.appendChild(b);
+    } else {
+      row.querySelector('code').style.color = 'var(--text-muted)';
+    }
+    cmCmds.appendChild(row);
+  }
+}
+
+for (const { el, bit } of cmBoxes) el.addEventListener('change', () => {
+  cmMode = el.checked ? cmMode | bit : cmMode & ~bit;
+  runCm();
+});
+for (const input of [cmNumeric, cmSymbolic]) input.addEventListener('input', () => {
+  const m = input === cmNumeric
+    ? (/^[0-7]{1,4}$/.test(input.value.trim()) ? parseInt(input.value.trim(), 8) : null)
+    : cmParse(input.value);
+  input.classList.toggle('err', m === null);
+  if (m === null) return;
+  cmMode = m;
+  runCm(input);
+});
+cmFile.addEventListener('input', () => runCm());
+cmFrom.addEventListener('input', () => runCm());
+document.querySelectorAll('[data-cm-copy]').forEach(b => {
+  b.onclick = () => copyText(document.getElementById(b.dataset.cmCopy).value, b);
 });
 
 /* boot with Unix Time Converter */
