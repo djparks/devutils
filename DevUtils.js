@@ -4,7 +4,7 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['⇄','YAML / JSON / Properties'], ['01','Number Base Converter'],
-  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression']
+  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression'], ['🛡️','SAML Parser']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -43,6 +43,7 @@ function selectTool(name) {
   const cmToolEl = document.getElementById('cmTool');
   const msToolEl = document.getElementById('msTool');
   const crToolEl = document.getElementById('crTool');
+  const sbToolEl = document.getElementById('sbTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -56,6 +57,7 @@ function selectTool(name) {
   cmToolEl.style.display = 'none';
   msToolEl.style.display = 'none';
   crToolEl.style.display = 'none';
+  sbToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -90,6 +92,9 @@ function selectTool(name) {
   } else if (name === 'Cron Expression') {
     crToolEl.style.display = 'flex';
     runCr();
+  } else if (name === 'SAML Parser') {
+    sbToolEl.style.display = 'flex';
+    runSb();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -3058,6 +3063,665 @@ document.getElementById('crCopy').onclick = e => copyText(crExpr.value.trim(), e
 crExpr.value = CR_DEFAULTS.linux;
 crBuildRows(crParse(crExpr.value, 'linux').tokens);
 crRenderStatic();
+
+/* ---------------- SAML Parser ---------------- */
+const sbInput = document.getElementById('sbInput');
+const sbOut = document.getElementById('sbOut');
+const sbStepsEl = document.getElementById('sbSteps');
+const sbStatusEl = document.getElementById('sbStatus');
+
+const SB_NS_DS = 'http://www.w3.org/2000/09/xmldsig#';
+const SB_STEPS = [
+  ['query', 'Query string parsed'], ['url', 'URL decoded'], ['b64', 'Base64 decoded'],
+  ['inflate', 'Inflated'], ['xml', 'XML parsed & formatted']
+];
+const SB_TYPES = {
+  Response: 'SAML Response', AuthnRequest: 'Authentication Request (AuthnRequest)',
+  LogoutRequest: 'Logout Request', LogoutResponse: 'Logout Response', Assertion: 'SAML Assertion',
+  ArtifactResolve: 'Artifact Resolve', ArtifactResponse: 'Artifact Response', AttributeQuery: 'Attribute Query',
+  EntityDescriptor: 'SAML Metadata (EntityDescriptor)', EntitiesDescriptor: 'SAML Metadata (EntitiesDescriptor)',
+  RequestSecurityTokenResponse: 'WS-Federation Token Response',
+  RequestSecurityTokenResponseCollection: 'WS-Federation Token Response'
+};
+const SB_URIS = {
+  'http://www.w3.org/2001/10/xml-exc-c14n#': 'Exclusive C14N',
+  'http://www.w3.org/2001/10/xml-exc-c14n#WithComments': 'Exclusive C14N (with comments)',
+  'http://www.w3.org/TR/2001/REC-xml-c14n-20010315': 'C14N 1.0',
+  'http://www.w3.org/2006/12/xml-c14n11': 'C14N 1.1',
+  'http://www.w3.org/2000/09/xmldsig#enveloped-signature': 'Enveloped signature',
+  'http://www.w3.org/2000/09/xmldsig#rsa-sha1': 'RSA-SHA1',
+  'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256': 'RSA-SHA256',
+  'http://www.w3.org/2001/04/xmldsig-more#rsa-sha384': 'RSA-SHA384',
+  'http://www.w3.org/2001/04/xmldsig-more#rsa-sha512': 'RSA-SHA512',
+  'http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256': 'ECDSA-SHA256',
+  'http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384': 'ECDSA-SHA384',
+  'http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512': 'ECDSA-SHA512',
+  'http://www.w3.org/2000/09/xmldsig#sha1': 'SHA-1',
+  'http://www.w3.org/2001/04/xmlenc#sha256': 'SHA-256',
+  'http://www.w3.org/2001/04/xmldsig-more#sha384': 'SHA-384',
+  'http://www.w3.org/2001/04/xmlenc#sha512': 'SHA-512',
+  'http://www.w3.org/2001/04/xmlenc#aes128-cbc': 'AES-128-CBC',
+  'http://www.w3.org/2001/04/xmlenc#aes256-cbc': 'AES-256-CBC',
+  'http://www.w3.org/2009/xmlenc11#aes128-gcm': 'AES-128-GCM',
+  'http://www.w3.org/2009/xmlenc11#aes256-gcm': 'AES-256-GCM',
+  'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p': 'RSA-OAEP',
+  'http://www.w3.org/2009/xmlenc11#rsa-oaep': 'RSA-OAEP (1.1)',
+  'http://www.w3.org/2001/04/xmlenc#rsa-1_5': 'RSA PKCS#1 v1.5'
+};
+const SB_ATTR_OIDS = {
+  '0.9.2342.19200300.100.1.1': 'uid', '0.9.2342.19200300.100.1.3': 'mail', '2.5.4.3': 'cn', '2.5.4.4': 'sn',
+  '2.5.4.42': 'givenName', '2.5.4.10': 'o', '2.5.4.11': 'ou', '2.5.4.12': 'title', '2.5.4.20': 'telephoneNumber',
+  '2.16.840.1.113730.3.1.241': 'displayName', '2.16.840.1.113730.3.1.3': 'employeeNumber',
+  '1.3.6.1.4.1.5923.1.1.1.1': 'eduPersonAffiliation', '1.3.6.1.4.1.5923.1.1.1.6': 'eduPersonPrincipalName',
+  '1.3.6.1.4.1.5923.1.1.1.7': 'eduPersonEntitlement', '1.3.6.1.4.1.5923.1.1.1.9': 'eduPersonScopedAffiliation',
+  '1.3.6.1.4.1.5923.1.1.1.10': 'eduPersonTargetedID'
+};
+const SB_X509_OIDS = {
+  '2.5.4.3': 'CN', '2.5.4.6': 'C', '2.5.4.7': 'L', '2.5.4.8': 'ST', '2.5.4.10': 'O', '2.5.4.11': 'OU',
+  '2.5.4.5': 'serialNumber', '1.2.840.113549.1.9.1': 'E', '0.9.2342.19200300.100.1.25': 'DC',
+  '1.2.840.113549.1.1.5': 'SHA1 with RSA', '1.2.840.113549.1.1.11': 'SHA256 with RSA',
+  '1.2.840.113549.1.1.12': 'SHA384 with RSA', '1.2.840.113549.1.1.13': 'SHA512 with RSA',
+  '1.2.840.113549.1.1.10': 'RSASSA-PSS', '1.2.840.10045.4.3.2': 'ECDSA with SHA256',
+  '1.2.840.10045.4.3.3': 'ECDSA with SHA384', '1.2.840.10045.4.3.4': 'ECDSA with SHA512',
+  '1.2.840.113549.1.1.1': 'RSA', '1.2.840.10045.2.1': 'EC', '1.3.101.112': 'Ed25519',
+  '1.2.840.10045.3.1.7': 'P-256', '1.3.132.0.34': 'P-384', '1.3.132.0.35': 'P-521'
+};
+
+/* --- small helpers --- */
+const sbEscA = s => esc(String(s)).replace(/"/g, '&quot;');
+const sbKids = (el, name) => el ? [...el.children].filter(c => c.localName === name) : [];
+const sbKid = (el, name) => sbKids(el, name)[0] || null;
+const sbAll = (el, name) => el ? [...el.getElementsByTagNameNS('*', name)] : [];
+const sbFind = (el, name) => sbAll(el, name)[0] || null;
+const sbText = el => el ? el.textContent.trim() : '';
+const sbAttr = (el, a) => el && el.hasAttribute(a) ? el.getAttribute(a) : '';
+const sbCode = v => v ? `<code>${esc(v)}</code>` : '';
+const sbBadge = (text, lvl) => `<span class="sb-badge ${lvl}">${esc(text)}</span>`;
+const sbIdOf = el => sbAttr(el, 'ID') || sbAttr(el, 'AssertionID') || sbAttr(el, 'ResponseID') || sbAttr(el, 'Id');
+
+function sbShort(v) {
+  if (!v) return '';
+  if (SB_URIS[v]) return SB_URIS[v];
+  const oid = v.match(/^urn:oid:([\d.]+)$/);
+  if (oid) return SB_ATTR_OIDS[oid[1]] || v;
+  const m = v.replace(/[#/]+$/, '').match(/[#:/]([^#:/]+)$/);
+  return m ? m[1] : v;
+}
+// Friendly label plus the full URI underneath
+function sbUrn(v) {
+  if (!v) return '';
+  const s = sbShort(v);
+  return s === v ? sbCode(v) : `<b class="sb-name">${esc(s)}</b> <span class="sb-dim">${esc(v)}</span>`;
+}
+function sbRel(ms) {
+  let s = Math.round(Math.abs(ms) / 1000), u = 'second';
+  for (const [n, name] of [[60, 'minute'], [60, 'hour'], [24, 'day'], [365, 'year']]) {
+    if (s < n * (name === 'year' ? 2 : 1)) break;
+    s = Math.round(s / n); u = name;
+  }
+  const t = `${s} ${u}${s === 1 ? '' : 's'}`;
+  return ms >= 0 ? `in ${t}` : `${t} ago`;
+}
+function sbTime(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d)) return sbCode(v) + ' ' + sbBadge('Invalid date', 'bad');
+  return `${sbCode(v)} <span class="sb-dim">${esc(d.toLocaleString())} · ${sbRel(d - Date.now())}</span>`;
+}
+function sbTable(rows) {
+  const r = rows.filter(([, v]) => v !== '' && v != null);
+  if (!r.length) return '';
+  return `<table class="sb-kv">${r.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join('')}</table>`;
+}
+
+let sbCopies = [];
+const sbCopyBtn = (text, label = '📋 Copy') => `<button class="btn" data-sb-copy="${sbCopies.push(text) - 1}">${label}</button>`;
+
+/* --- decoding pipeline --- */
+function sbB64Bytes(s) {
+  let t = s.replace(/[\r\n\t]/g, '').trim().replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  if (!t || !/^[A-Za-z0-9+/]+$/.test(t) || t.length % 4 === 1) return null;
+  t += '='.repeat((4 - t.length % 4) % 4);
+  const bin = atob(t);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function sbBytesB64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+async function sbStream(bytes, stream) {
+  const out = new Blob([bytes]).stream().pipeThrough(stream);
+  return new Uint8Array(await new Response(out).arrayBuffer());
+}
+const sbUtf8 = bytes => { try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return null; } };
+const sbLooksXml = s => /^\s*﻿?</.test(s);
+
+async function sbDecode(raw) {
+  const steps = {}, info = {};
+  let s = raw.trim();
+  const fail = (step, msg) => { steps[step] = 'fail'; return { steps, info, error: msg }; };
+
+  if (!sbLooksXml(s) && /(?:^|[?&])(SAMLRequest|SAMLResponse|wresult)=/.test(s)) {
+    const q = s.indexOf('?');
+    if (q > 0) info.endpoint = s.slice(0, q);
+    const params = new URLSearchParams((q >= 0 ? s.slice(q + 1) : s).split('#')[0]);
+    info.params = [...params];
+    info.param = ['SAMLRequest', 'SAMLResponse', 'wresult'].find(k => params.has(k));
+    s = params.get(info.param).trim();
+    steps.query = steps.url = 'done';
+  } else if (!sbLooksXml(s) && /%[0-9A-Fa-f]{2}/.test(s)) {
+    try { s = decodeURIComponent(s).trim(); } catch { return fail('url', 'The input contains an invalid % escape sequence.'); }
+    steps.url = 'done';
+  }
+
+  let xml;
+  if (sbLooksXml(s)) {
+    xml = s;
+  } else {
+    const bytes = sbB64Bytes(s);
+    if (!bytes) return fail('b64', 'This is not valid Base64, XML or a URL containing SAMLRequest / SAMLResponse.');
+    steps.b64 = 'done';
+    const text = sbUtf8(bytes);
+    if (text !== null && sbLooksXml(text)) {
+      xml = text;
+      info.binding = info.param === 'wresult' ? null : 'HTTP-POST';
+    } else {
+      if (typeof DecompressionStream === 'undefined') return fail('inflate', 'This browser cannot inflate (DecompressionStream is not supported).');
+      for (const fmt of ['deflate-raw', 'deflate']) {
+        try {
+          const t = sbUtf8(await sbStream(bytes, new DecompressionStream(fmt)));
+          if (t !== null && sbLooksXml(t)) { xml = t; break; }
+        } catch { /* try the next format */ }
+      }
+      if (!xml) return fail('inflate', 'Base64 decoded to binary data that is not XML and could not be inflated (DEFLATE).');
+      steps.inflate = 'done';
+      info.binding = 'HTTP-Redirect';
+    }
+  }
+
+  xml = xml.replace(/^﻿/, '').trim();
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const perr = doc.getElementsByTagName('parsererror')[0];
+  if (perr) return { ...fail('xml', 'The decoded text is not well-formed XML: ' + perr.textContent.trim().split('\n').slice(0, 2).join(' ')), xml };
+  steps.xml = 'done';
+  return { steps, info, xml, doc };
+}
+
+/* --- XML pretty printer with highlighting --- */
+function sbPretty(doc, raw) {
+  let txt = '', html = '';
+  const put = (t, cls) => { txt += t; html += cls ? `<span class="${cls}">${esc(t)}</span>` : esc(t); };
+  const xA = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const xT = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const other = (n, pad) => {
+    if (n.nodeType === 3) put(pad + xT(n.nodeValue.trim()) + '\n');
+    else if (n.nodeType === 4) put(pad + '<![CDATA[' + n.nodeValue + ']]>\n', 'x');
+    else if (n.nodeType === 8) put(pad + '<!--' + n.nodeValue + '-->\n', 'c');
+    else if (n.nodeType === 7) put(pad + `<?${n.target} ${n.data}?>\n`, 'c');
+  };
+  function el(e, d) {
+    const pad = '  '.repeat(d);
+    put(pad); put('<' + e.nodeName, 't');
+    const attrs = [...e.attributes];
+    const long = attrs.length > 1 && attrs.reduce((n, a) => n + a.name.length + a.value.length + 4, pad.length + e.nodeName.length) > 110;
+    attrs.forEach((a, i) => {
+      put(long && i ? '\n' + pad + ' '.repeat(e.nodeName.length + 2) : ' ');
+      put(a.name, 'a'); put('='); put('"' + xA(a.value) + '"', 'v');
+    });
+    const kids = [...e.childNodes].filter(n => !(n.nodeType === 3 && !n.nodeValue.trim()));
+    if (!kids.length) { put('/>', 't'); put('\n'); return; }
+    put('>', 't');
+    if (kids.length === 1 && kids[0].nodeType === 3) {
+      put(xT(kids[0].nodeValue.trim()), 'x');
+    } else {
+      put('\n');
+      for (const k of kids) k.nodeType === 1 ? el(k, d + 1) : other(k, pad + '  ');
+      put(pad);
+    }
+    put('</' + e.nodeName + '>', 't'); put('\n');
+  }
+  const decl = raw.match(/^\s*(<\?xml[^?]*\?>)/);
+  if (decl) put(decl[1] + '\n', 'c');
+  for (const n of doc.childNodes) n.nodeType === 1 ? el(n, 0) : other(n, '');
+  return { txt: txt.trimEnd(), html: html.replace(/\s+$/, '') };
+}
+
+/* --- X.509 (DER) --- */
+function sbParseCert(b64) {
+  const der = sbB64Bytes(b64);
+  if (!der) return null;
+  const read = pos => {
+    let len = der[pos + 1], p = pos + 2;
+    if (len & 0x80) { const n = len & 0x7f; len = 0; for (let i = 0; i < n; i++) len = len * 256 + der[p++]; }
+    if (p + len > der.length) throw new Error('truncated');
+    return { tag: der[pos], start: p, end: p + len };
+  };
+  const kids = node => { const out = []; for (let p = node.start; p < node.end;) { const c = read(p); out.push(c); p = c.end; } return out; };
+  const oid = node => {
+    const b = der.subarray(node.start, node.end), parts = [Math.floor(b[0] / 40), b[0] % 40];
+    let v = 0;
+    for (let i = 1; i < b.length; i++) { v = v * 128 + (b[i] & 0x7f); if (!(b[i] & 0x80)) { parts.push(v); v = 0; } }
+    return parts.join('.');
+  };
+  const str = node => {
+    const b = der.subarray(node.start, node.end);
+    if (node.tag === 0x1e) { let s = ''; for (let i = 0; i + 1 < b.length; i += 2) s += String.fromCharCode(b[i] << 8 | b[i + 1]); return s; }
+    return new TextDecoder(node.tag === 0x0c ? 'utf-8' : 'latin1').decode(b);
+  };
+  const name = node => kids(node).flatMap(set => kids(set).map(atv => {
+    const [o, v] = kids(atv), id = oid(o);
+    return `${SB_X509_OIDS[id] || id}=${str(v)}`;
+  })).reverse().join(', ');
+  const time = node => {
+    const s = str(node);
+    const m = node.tag === 0x17 ? s.match(/^(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/) : s.match(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?Z$/);
+    if (!m) return null;
+    let y = +m[1]; if (node.tag === 0x17) y += y < 50 ? 2000 : 1900;
+    return new Date(Date.UTC(y, m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+  };
+  try {
+    const cert = read(0), [tbs, sigAlg] = kids(cert);
+    let f = kids(tbs);
+    if (f[0].tag === 0xa0) f = f.slice(1);
+    const [serial, , issuer, validity, subject, spki] = f;
+    const [nb, na] = kids(validity).map(time);
+    const [alg, bits] = kids(spki), [kOid, kParam] = kids(alg), keyType = SB_X509_OIDS[oid(kOid)] || oid(kOid);
+    let key = keyType;
+    if (keyType === 'RSA') {
+      const mod = kids(read(bits.start + 1))[0];
+      let i = mod.start; while (der[i] === 0) i++;
+      key += ` ${(mod.end - i) * 8 - (Math.clz32(der[i]) - 24)} bits`;
+    } else if (keyType === 'EC' && kParam && kParam.tag === 0x06) {
+      key += ' ' + (SB_X509_OIDS[oid(kParam)] || oid(kParam));
+    }
+    const serialHex = [...der.subarray(serial.start, serial.end)].map(b => b.toString(16).padStart(2, '0')).join('').replace(/^00(?=.)/, '').toUpperCase();
+    const sa = oid(kids(sigAlg)[0]);
+    return { der, subject: name(subject), issuer: name(issuer), notBefore: nb, notAfter: na, serial: serialHex, key, sigAlg: SB_X509_OIDS[sa] || sa };
+  } catch { return null; }
+}
+let sbDers = [];
+function sbCertHtml(b64, label, checks) {
+  const clean = b64.replace(/\s+/g, '');
+  const pem = '-----BEGIN CERTIFICATE-----\n' + clean.match(/.{1,64}/g).join('\n') + '\n-----END CERTIFICATE-----';
+  const c = sbParseCert(clean);
+  if (!c) return `<div class="sb-cert"><div class="sb-cert-head"><b>${esc(label)}</b> ${sbBadge('Could not parse certificate', 'bad')}<span class="spacer"></span>${sbCopyBtn(pem, '📋 Copy PEM')}</div></div>`;
+  const now = Date.now();
+  let valid;
+  if (c.notAfter && c.notAfter < now) { valid = sbBadge('Expired', 'bad'); checks.push(['warn', `Certificate “${c.subject}” expired ${sbRel(c.notAfter - now)}. Many SPs ignore this, but check your IdP rotation.`]); }
+  else if (c.notBefore && c.notBefore > now) valid = sbBadge('Not yet valid', 'bad');
+  else valid = sbBadge('Valid', 'ok');
+  if (/SHA1/.test(c.sigAlg)) checks.push(['warn', `Certificate “${c.subject}” is signed with SHA-1.`]);
+  const fmt = d => d ? `${sbCode(d.toISOString().replace('.000', ''))} <span class="sb-dim">${sbRel(d - now)}</span>` : '';
+  const idx = sbDers.push(c.der) - 1;
+  return `<div class="sb-cert">
+    <div class="sb-cert-head"><b>${esc(label)}</b> ${valid}${c.subject === c.issuer ? sbBadge('Self-signed', 'info') : ''}<span class="spacer"></span>${sbCopyBtn(pem, '📋 Copy PEM')}</div>
+    ${sbTable([
+      ['Subject', sbCode(c.subject)], ['Issuer', sbCode(c.issuer)], ['Serial number', sbCode(c.serial)],
+      ['Valid from', fmt(c.notBefore)], ['Valid to', fmt(c.notAfter)], ['Public key', esc(c.key)], ['Signature algorithm', esc(c.sigAlg)],
+      ['SHA-1 thumbprint', `<code data-sb-thumb="${idx}" data-alg="SHA-1">…</code>`],
+      ['SHA-256 thumbprint', `<code data-sb-thumb="${idx}" data-alg="SHA-256">…</code>`]
+    ])}</div>`;
+}
+async function sbFillThumbs() {
+  for (const el of sbOut.querySelectorAll('[data-sb-thumb]')) {
+    try {
+      const h = new Uint8Array(await crypto.subtle.digest(el.dataset.alg, sbDers[+el.dataset.sbThumb]));
+      el.textContent = [...h].map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');
+    } catch { el.closest('tr').remove(); }
+  }
+}
+
+/* --- analysis --- */
+function sbStatusHtml(st, checks) {
+  if (!st) return '';
+  const code = sbKid(st, 'StatusCode'), val = sbAttr(code, 'Value');
+  const sub = sbAttr(sbKid(code, 'StatusCode'), 'Value');
+  const msg = sbText(sbKid(st, 'StatusMessage'));
+  const ok = /:Success$|^samlp?:Success$/.test(val);
+  if (!ok) checks.push(['bad', `Status is ${sbShort(val) || 'missing'}${sub ? ' / ' + sbShort(sub) : ''}${msg ? ': “' + msg + '”' : ''}.`]);
+  return `${sbBadge(sbShort(val) || '?', ok ? 'ok' : 'bad')} ${sub ? sbBadge(sbShort(sub), 'bad') : ''} <span class="sb-dim">${esc(val)}${sub ? '<br>' + esc(sub) : ''}</span>${msg ? `<div class="sb-msg">${esc(msg)}</div>` : ''}`;
+}
+function sbWindow(nb, noa, checks, what) {
+  const now = Date.now(), b = nb ? new Date(nb) : null, a = noa ? new Date(noa) : null;
+  if (b && b > now) { checks.push(['bad', `${what}: not valid yet (starts ${sbRel(b - now)}). Check for clock skew between IdP and SP.`]); return sbBadge('Not yet valid', 'bad'); }
+  if (a && a <= now) { checks.push(['bad', `${what}: expired ${sbRel(a - now)}.`]); return sbBadge('Expired', 'bad'); }
+  if (a || b) { checks.push(['ok', `${what}: currently valid${a ? ' (expires ' + sbRel(a - now) + ')' : ''}.`]); return sbBadge('Valid now', 'ok'); }
+  return '';
+}
+
+function sbAssertion(a, n, total, ctx, checks) {
+  const v1 = /SAML:1\./.test(a.namespaceURI || '');
+  const id = sbIdOf(a), issuer = sbText(sbKid(a, 'Issuer')) || sbAttr(a, 'Issuer');
+  const signed = sbKids(a, 'Signature').length > 0;
+  const what = total > 1 ? `Assertion ${n}` : 'Assertion';
+  let h = `<section class="dc-card"><h3 class="dc-title">${what} ${signed ? sbBadge('Signed', 'ok') : sbBadge('Not signed', 'warn')} ${v1 ? sbBadge('SAML 1.1', 'info') : ''}</h3>`;
+  h += sbTable([
+    ['ID', sbCode(id)], ['Issue instant', sbTime(sbAttr(a, 'IssueInstant'))], ['Issuer', sbCode(issuer)],
+    ['Version', v1 ? `${sbAttr(a, 'MajorVersion')}.${sbAttr(a, 'MinorVersion')}` : esc(sbAttr(a, 'Version'))]
+  ]);
+  if (ctx.issuer && issuer && ctx.issuer !== issuer) checks.push(['warn', `${what} issuer (${issuer}) differs from the Response issuer (${ctx.issuer}).`]);
+
+  // Subject
+  const subj = v1 ? sbFind(a, 'Subject') : sbKid(a, 'Subject');
+  if (subj) {
+    const nid = sbKid(subj, 'NameID') || sbKid(subj, 'NameIdentifier');
+    const rows = [
+      ['Name ID', sbCode(sbText(nid))], ['Format', sbUrn(sbAttr(nid, 'Format'))],
+      ['Name qualifier', sbCode(sbAttr(nid, 'NameQualifier'))], ['SP name qualifier', sbCode(sbAttr(nid, 'SPNameQualifier'))],
+      ['Encrypted ID', sbKid(subj, 'EncryptedID') ? sbBadge('Encrypted — needs the SP private key', 'warn') : '']
+    ];
+    for (const sc of sbKids(subj, 'SubjectConfirmation')) {
+      const data = sbKid(sc, 'SubjectConfirmationData');
+      const noa = sbAttr(data, 'NotOnOrAfter'), rcpt = sbAttr(data, 'Recipient'), irt = sbAttr(data, 'InResponseTo');
+      rows.push(['Confirmation', sbUrn(sbAttr(sc, 'Method') || sbText(sbKid(sc, 'ConfirmationMethod')))],
+        ['Recipient', sbCode(rcpt)], ['Not before', sbTime(sbAttr(data, 'NotBefore'))],
+        ['Not on or after', noa ? sbTime(noa) + ' ' + sbWindow(sbAttr(data, 'NotBefore'), noa, checks, `${what} subject confirmation`) : ''],
+        ['In response to', sbCode(irt)], ['Address', sbCode(sbAttr(data, 'Address'))]);
+      if (rcpt && ctx.destination && rcpt !== ctx.destination) checks.push(['warn', `Subject confirmation Recipient (${rcpt}) does not match the Response Destination (${ctx.destination}).`]);
+      if (irt && ctx.inResponseTo && irt !== ctx.inResponseTo) checks.push(['warn', `Subject confirmation InResponseTo (${irt}) does not match the Response InResponseTo (${ctx.inResponseTo}).`]);
+    }
+    h += `<h4 class="sb-h">Subject</h4>` + sbTable(rows);
+  }
+
+  // Conditions
+  const cond = sbKid(a, 'Conditions');
+  if (cond) {
+    const nb = sbAttr(cond, 'NotBefore'), noa = sbAttr(cond, 'NotOnOrAfter');
+    const auds = sbAll(cond, 'Audience').map(x => sbCode(sbText(x))).join('<br>');
+    h += `<h4 class="sb-h">Conditions ${sbWindow(nb, noa, checks, `${what} conditions`)}</h4>` + sbTable([
+      ['Not before', sbTime(nb)], ['Not on or after', sbTime(noa)], ['Audience', auds],
+      ['One-time use', sbFind(cond, 'OneTimeUse') ? 'Yes' : ''], ['Proxy restriction', sbFind(cond, 'ProxyRestriction') ? 'Yes' : '']
+    ]);
+    if (ctx.audience === undefined) ctx.audience = auds;
+  }
+
+  // Authentication statements
+  for (const st of [...sbKids(a, 'AuthnStatement'), ...sbKids(a, 'AuthenticationStatement')]) {
+    const auth = sbAll(st, 'AuthenticatingAuthority').map(x => sbCode(sbText(x))).join('<br>');
+    h += `<h4 class="sb-h">Authentication</h4>` + sbTable([
+      ['Authn instant', sbTime(sbAttr(st, 'AuthnInstant') || sbAttr(st, 'AuthenticationInstant'))],
+      ['Session index', sbCode(sbAttr(st, 'SessionIndex'))], ['Session ends', sbTime(sbAttr(st, 'SessionNotOnOrAfter'))],
+      ['Context class', sbUrn(sbText(sbFind(st, 'AuthnContextClassRef')) || sbAttr(st, 'AuthenticationMethod'))],
+      ['Authenticating authority', auth], ['Client address', sbCode(sbAttr(sbFind(st, 'SubjectLocality'), 'Address') || sbAttr(sbFind(st, 'SubjectLocality'), 'IPAddress'))]
+    ]);
+  }
+
+  // Attributes
+  const attrs = sbAll(a, 'Attribute').filter(x => /AttributeStatement$/.test(x.parentElement.localName));
+  if (attrs.length) {
+    h += `<h4 class="sb-h">Attributes <span class="sb-dim">(${attrs.length})</span></h4><table class="sb-kv sb-attrs"><tr><th>Name</th><th>Value</th></tr>`;
+    for (const at of attrs) {
+      const name = sbAttr(at, 'Name') || sbAttr(at, 'AttributeName');
+      const label = sbAttr(at, 'FriendlyName') || sbShort(name);
+      const vals = sbKids(at, 'AttributeValue').map(v =>
+        v.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'nil') === 'true' ? '<span class="sb-dim">(nil)</span>'
+          : v.children.length ? sbCode(new XMLSerializer().serializeToString(v).replace(/^<[^>]*>|<\/[^>]*>$/g, '')) : sbCode(v.textContent) || '<span class="sb-dim">(empty)</span>');
+      h += `<tr><th><b class="sb-name">${esc(label)}</b>${label !== name ? `<span class="sb-dim">${esc(name)}</span>` : ''}${sbAttr(at, 'NameFormat') || sbAttr(at, 'AttributeNamespace') ? `<span class="sb-dim">${esc(sbShort(sbAttr(at, 'NameFormat') || sbAttr(at, 'AttributeNamespace')))}</span>` : ''}</th><td>${vals.join('<br>')}</td></tr>`;
+    }
+    h += '</table>';
+  }
+  return h + '</section>';
+}
+
+function sbSignatures(root, info, checks) {
+  const sigs = sbAll(root, 'Signature').filter(s => s.namespaceURI === SB_NS_DS);
+  let h = `<section class="dc-card"><h3 class="dc-title">Signatures</h3><p class="sb-note">Signatures are decoded and described here, not cryptographically verified. Verify them with your SAML library using the IdP's trusted certificate.</p>`;
+  const sp = info.params && new Map(info.params);
+  if (sp && sp.has('Signature')) {
+    const alg = sp.get('SigAlg') || '';
+    if (/sha1/i.test(alg)) checks.push(['warn', 'The HTTP-Redirect signature uses SHA-1.']);
+    checks.push(['info', 'Signed with the HTTP-Redirect binding (SigAlg and Signature query parameters).']);
+    h += `<h4 class="sb-h">HTTP-Redirect query string signature</h4>` + sbTable([['Algorithm', sbUrn(alg)], ['Signature', `<code class="sb-trunc" title="${sbEscA(sp.get('Signature'))}">${esc(sp.get('Signature'))}</code>`]]);
+  }
+  if (!sigs.length && !(sp && sp.has('Signature'))) h += '<p class="sb-note">No XML signatures found.</p>';
+  sigs.forEach((sig, i) => {
+    const parent = sig.parentElement, pid = sbIdOf(parent);
+    const sm = sbAttr(sbFind(sig, 'SignatureMethod'), 'Algorithm');
+    const ref = sbFind(sig, 'Reference'), uri = sbAttr(ref, 'URI');
+    const dm = sbAttr(sbFind(ref, 'DigestMethod'), 'Algorithm');
+    const transforms = sbAll(ref, 'Transform').map(t => sbUrn(sbAttr(t, 'Algorithm'))).join('<br>');
+    let refBadge = '';
+    if (uri && pid && uri !== '#' + pid) {
+      refBadge = sbBadge('Does not match parent ID', 'bad');
+      checks.push(['bad', `Signature on ${parent.localName} references ${uri}, not its parent element (#${pid}). This is a signature-wrapping red flag.`]);
+    } else if (uri) refBadge = sbBadge('Matches parent', 'ok');
+    if (/sha1/i.test(sm) || /sha1/i.test(dm)) checks.push(['warn', `Signature on ${parent.localName} uses SHA-1 (${sbShort(sm)} / ${sbShort(dm)}). Prefer SHA-256.`]);
+    const sv = sbText(sbFind(sig, 'SignatureValue')).replace(/\s+/g, '');
+    h += `<h4 class="sb-h">Signature ${sigs.length > 1 ? i + 1 + ' ' : ''}on <code>${esc(parent.localName)}</code></h4>` + sbTable([
+      ['Signed element', `${esc(parent.nodeName)} ${sbCode(pid)}`], ['Reference URI', sbCode(uri) + ' ' + refBadge],
+      ['Signature method', sbUrn(sm)], ['Canonicalization', sbUrn(sbAttr(sbFind(sig, 'CanonicalizationMethod'), 'Algorithm'))],
+      ['Transforms', transforms], ['Digest method', sbUrn(dm)], ['Digest value', sbCode(sbText(sbFind(ref, 'DigestValue')))],
+      ['Signature value', sv ? `<code class="sb-trunc" title="${sbEscA(sv)}">${esc(sv)}</code>` : '']
+    ]);
+    sbAll(sig, 'X509Certificate').forEach((c, j, arr) => h += sbCertHtml(sbText(c), arr.length > 1 ? `Certificate ${j + 1}` : 'Certificate', checks));
+  });
+  return h + '</section>';
+}
+
+function sbMetadata(root, checks) {
+  const eds = root.localName === 'EntitiesDescriptor' ? sbAll(root, 'EntityDescriptor') : [root];
+  let h = '';
+  for (const ed of eds) {
+    const roles = [...ed.children].filter(c => /Descriptor$/.test(c.localName));
+    let rows = '';
+    for (const r of roles) for (const ep of r.children) {
+      if (!sbAttr(ep, 'Location')) continue;
+      rows += `<tr><td>${esc(r.localName.replace('Descriptor', ''))}</td><td>${esc(ep.localName)}${ep.hasAttribute('index') ? ` <span class="sb-dim">#${esc(ep.getAttribute('index'))}${sbAttr(ep, 'isDefault') === 'true' ? ' default' : ''}</span>` : ''}</td><td>${esc(sbShort(sbAttr(ep, 'Binding')))}</td><td>${sbCode(sbAttr(ep, 'Location'))}</td></tr>`;
+    }
+    h += `<section class="dc-card"><h3 class="dc-title">Entity ${sbCode(sbAttr(ed, 'entityID'))}</h3>` + sbTable([
+      ['Roles', roles.map(r => esc(r.localName)).join(', ')], ['Valid until', sbTime(sbAttr(ed, 'validUntil'))],
+      ['Name ID formats', sbAll(ed, 'NameIDFormat').map(x => sbUrn(sbText(x))).join('<br>')],
+      ['Signs requests', esc(sbAttr(sbFind(ed, 'SPSSODescriptor'), 'AuthnRequestsSigned'))],
+      ['Wants signed assertions', esc(sbAttr(sbFind(ed, 'SPSSODescriptor'), 'WantAssertionsSigned'))],
+      ['Wants signed requests', esc(sbAttr(sbFind(ed, 'IDPSSODescriptor'), 'WantAuthnRequestsSigned'))]
+    ]);
+    if (rows) h += `<h4 class="sb-h">Endpoints</h4><table class="sb-kv sb-ep"><tr><th>Role</th><th>Service</th><th>Binding</th><th>Location</th></tr>${rows}</table>`;
+    sbAll(ed, 'KeyDescriptor').forEach(kd => sbAll(kd, 'X509Certificate').forEach(c =>
+      h += sbCertHtml(sbText(c), `${kd.parentElement.localName.replace('Descriptor', '')} ${sbAttr(kd, 'use') || 'signing & encryption'} certificate`, checks)));
+    h += '</section>';
+  }
+  return h;
+}
+
+function sbAnalyze(res) {
+  const { doc, info } = res, root = doc.documentElement, type = root.localName;
+  const checks = [], now = Date.now();
+  const v1 = /SAML:1\./.test(root.namespaceURI || '');
+  const isMeta = /^Entit(y|ies)Descriptor$/.test(type);
+  const isWsFed = /^RequestSecurityTokenResponse/.test(type);
+  const issuer = sbText(sbKid(root, 'Issuer')) || (type === 'Assertion' ? sbAttr(root, 'Issuer') : '');
+  const ctx = { issuer, destination: sbAttr(root, 'Destination') || sbAttr(root, 'Recipient'), inResponseTo: sbAttr(root, 'InResponseTo') };
+
+  // Summary
+  const ver = v1 ? `${sbAttr(root, 'MajorVersion')}.${sbAttr(root, 'MinorVersion')}` : sbAttr(root, 'Version');
+  const rows = [
+    ['Message type', `<b class="sb-name">${esc(SB_TYPES[type] || type)}</b>${ver ? ` <span class="sb-dim">SAML ${esc(ver)}</span>` : ''}`],
+    ['Binding', info.binding ? esc(info.binding) + (info.param ? ` <span class="sb-dim">via ${esc(info.param)} parameter</span>` : '') : isWsFed ? 'WS-Federation (wresult)' : ''],
+    ['ID', sbCode(isMeta ? '' : sbIdOf(root))], ['In response to', sbCode(ctx.inResponseTo)],
+    ['Issue instant', sbTime(sbAttr(root, 'IssueInstant'))], ['Issuer', sbCode(issuer)], ['Destination', sbCode(ctx.destination)]
+  ];
+  if (sbKid(root, 'Status')) rows.push(['Status', sbStatusHtml(sbKid(root, 'Status'), checks)]);
+  if (type === 'AuthnRequest') {
+    const pol = sbKid(root, 'NameIDPolicy'), rac = sbKid(root, 'RequestedAuthnContext');
+    rows.push(['ACS URL', sbCode(sbAttr(root, 'AssertionConsumerServiceURL'))], ['ACS index', esc(sbAttr(root, 'AssertionConsumerServiceIndex'))],
+      ['Protocol binding', sbUrn(sbAttr(root, 'ProtocolBinding'))], ['Provider name', esc(sbAttr(root, 'ProviderName'))],
+      ['Force authn', esc(sbAttr(root, 'ForceAuthn'))], ['Is passive', esc(sbAttr(root, 'IsPassive'))],
+      ['Name ID policy', pol ? sbUrn(sbAttr(pol, 'Format')) + (pol.hasAttribute('AllowCreate') ? ` <span class="sb-dim">AllowCreate=${esc(sbAttr(pol, 'AllowCreate'))}</span>` : '') : ''],
+      ['Requested authn context', rac ? `<span class="sb-dim">${esc(sbAttr(rac, 'Comparison') || 'exact')}:</span> ` + sbAll(rac, 'AuthnContextClassRef').map(x => sbUrn(sbText(x))).join('<br>') : '']);
+  }
+  if (type === 'LogoutRequest') {
+    const nid = sbKid(root, 'NameID');
+    rows.push(['Name ID', sbCode(sbText(nid)) + (nid && nid.hasAttribute('Format') ? ' ' + sbUrn(sbAttr(nid, 'Format')) : '')],
+      ['Session index', sbKids(root, 'SessionIndex').map(x => sbCode(sbText(x))).join('<br>')],
+      ['Reason', sbUrn(sbAttr(root, 'Reason'))], ['Not on or after', sbTime(sbAttr(root, 'NotOnOrAfter'))]);
+  }
+  if (isWsFed) {
+    const rstr = type === 'RequestSecurityTokenResponse' ? root : sbFind(root, 'RequestSecurityTokenResponse');
+    const life = sbFind(rstr, 'Lifetime');
+    rows.push(['Context', sbCode(sbAttr(rstr, 'Context'))], ['Applies to', sbCode(sbText(sbFind(sbFind(rstr, 'AppliesTo'), 'Address')))],
+      ['Token type', sbUrn(sbText(sbFind(rstr, 'TokenType')))], ['Created', sbTime(sbText(sbFind(life, 'Created')))],
+      ['Expires', sbTime(sbText(sbFind(life, 'Expires')))]);
+    if (life) sbWindow(sbText(sbFind(life, 'Created')), sbText(sbFind(life, 'Expires')), checks, 'Token lifetime');
+  }
+  if (isMeta) rows.push(['Entities', esc(String(type === 'EntitiesDescriptor' ? sbAll(root, 'EntityDescriptor').length : 1))]);
+
+  // Assertions
+  const assertions = sbAll(root, 'Assertion').filter(a => /^urn:oasis:names:tc:SAML:[12]\.\d:assertion$/.test(a.namespaceURI || ''));
+  const encrypted = sbAll(root, 'EncryptedAssertion');
+  let body = assertions.map((a, i) => sbAssertion(a, i + 1, assertions.length, ctx, checks)).join('');
+  if (encrypted.length) {
+    checks.push(['info', `${encrypted.length} encrypted assertion${encrypted.length > 1 ? 's' : ''}: the contents can only be read with the SP's private key.`]);
+    body += encrypted.map(e => {
+      const data = sbFind(e, 'EncryptedData'), key = sbFind(e, 'EncryptedKey');
+      return `<section class="dc-card"><h3 class="dc-title">Encrypted assertion ${sbBadge('Encrypted', 'warn')}</h3>` + sbTable([
+        ['Data encryption', sbUrn(sbAttr(sbKid(data, 'EncryptionMethod'), 'Algorithm'))],
+        ['Key transport', sbUrn(sbAttr(sbKid(key, 'EncryptionMethod'), 'Algorithm'))],
+        ['Key digest', sbUrn(sbAttr(sbFind(sbKid(key, 'EncryptionMethod'), 'DigestMethod'), 'Algorithm'))],
+        ['Recipient', sbCode(sbAttr(key, 'Recipient'))]
+      ]) + sbAll(key, 'X509Certificate').map(c => sbCertHtml(sbText(c), 'SP encryption certificate', checks)).join('') + '</section>';
+    }).join('');
+  }
+  if (sbAll(root, 'EncryptedAttribute').length) checks.push(['info', 'Some attributes are encrypted (EncryptedAttribute).']);
+  if (/Response$/.test(type) && !isWsFed && type !== 'LogoutResponse' && assertions.length + encrypted.length === 0 && /:Success$/.test(sbAttr(sbFind(root, 'StatusCode'), 'Value')))
+    checks.push(['warn', 'The Response has a Success status but contains no assertion.']);
+  if (assertions.length + encrypted.length > 1 && type === 'Response') checks.push(['warn', `The Response contains ${assertions.length + encrypted.length} assertions; most SPs expect exactly one.`]);
+  if (isMeta) body += sbMetadata(root, checks);
+
+  // Signature coverage
+  const sigs = sbAll(root, 'Signature').filter(s => s.namespaceURI === SB_NS_DS);
+  const redirectSig = info.params && info.params.some(([k]) => k === 'Signature');
+  if (type === 'Response' && assertions.length && !sigs.length) checks.push(['bad', 'Neither the Response nor its assertion is signed.']);
+  else if (type === 'Response' && assertions.length && !assertions.every(a => sbKids(a, 'Signature').length)) checks.push(['info', 'Only the Response is signed, not the assertion. That is fine if your SP requires a signed Response.']);
+  if (/Request$/.test(type) && !sigs.length && !redirectSig) checks.push(['info', `The ${type} is not signed. That is fine unless the IdP requires signed requests.`]);
+
+  // Duplicate IDs (XML signature wrapping indicator)
+  const ids = {};
+  for (const e of root.getElementsByTagName('*')) { const id = sbIdOf(e); if (id) ids[id] = (ids[id] || 0) + 1; }
+  for (const [id, n] of Object.entries(ids)) if (n > 1) checks.push(['bad', `ID “${id}” appears ${n} times. Duplicate IDs are a signature-wrapping red flag.`]);
+
+  if (sbAttr(root, 'IssueInstant')) {
+    const age = now - new Date(sbAttr(root, 'IssueInstant'));
+    if (age < -60000) checks.push(['warn', `IssueInstant is ${sbRel(-age).replace('in ', '')} in the future. Check for clock skew.`]);
+  }
+
+  const sigHtml = sigs.length || redirectSig || /Response$|Request$|^Assertion$/.test(type) ? sbSignatures(root, info, checks) : '';
+
+  // Render
+  let html = '';
+  if (info.params) {
+    html += `<section class="dc-card"><h3 class="dc-title">Query parameters</h3>` + sbTable([
+      ['Endpoint', sbCode(info.endpoint || '')],
+      ...info.params.map(([k, v]) => [k, k === info.param ? `<span class="sb-dim">decoded below (${v.length} characters)</span>`
+        : k === 'SigAlg' ? sbUrn(v) : `<code class="sb-trunc" title="${sbEscA(v)}">${esc(v)}</code>`])
+    ]) + '</section>';
+  }
+  const icon = { ok: '✓', warn: '!', bad: '✕', info: 'i' };
+  const order = { bad: 0, warn: 1, info: 2, ok: 3 };
+  checks.sort((a, b) => order[a[0]] - order[b[0]]);
+  html += `<div class="dc-cards">
+    <section class="dc-card"><h3 class="dc-title">Summary</h3>${sbTable(rows)}</section>
+    <section class="dc-card"><h3 class="dc-title">Checks</h3>${checks.length
+      ? `<ul class="sb-checks">${checks.map(([l, m]) => `<li class="${l}"><span class="sb-ico">${icon[l]}</span><span>${esc(m)}</span></li>`).join('')}</ul>`
+      : '<p class="sb-note">Nothing to check for this message type.</p>'}
+      <p class="sb-note">Times are compared with this computer's clock (${esc(new Date().toLocaleString())}).</p></section>
+  </div>`;
+  return html + body + sigHtml;
+}
+
+let sbSeq = 0;
+async function runSb() {
+  const seq = ++sbSeq;
+  const raw = sbInput.value;
+  sbCopies = []; sbDers = [];
+  if (!raw.trim()) {
+    sbStepsEl.innerHTML = SB_STEPS.map(([, l]) => `<span class="sb-step">${l}</span>`).join('');
+    sbStatusEl.textContent = 'Paste a SAMLRequest / SAMLResponse value, a full redirect URL or raw XML. Decoding happens entirely in your browser.';
+    sbStatusEl.className = 'url-status';
+    sbInput.classList.remove('err');
+    sbOut.innerHTML = '';
+    return;
+  }
+  const res = await sbDecode(raw);
+  if (seq !== sbSeq) return;
+  sbStepsEl.innerHTML = SB_STEPS.map(([k, l]) => {
+    const st = res.steps[k];
+    return `<span class="sb-step ${st || 'skip'}">${st === 'done' ? '✓' : st === 'fail' ? '✕' : '–'} ${l}</span>`;
+  }).join('');
+  sbInput.classList.toggle('err', !!res.error);
+  if (res.error) {
+    sbStatusEl.textContent = res.error;
+    sbStatusEl.className = 'url-status bad';
+    sbOut.innerHTML = res.xml ? `<section class="dc-card"><h3 class="dc-title">Decoded text</h3><pre class="sb-xml">${esc(res.xml)}</pre></section>` : '';
+    return;
+  }
+  sbStatusEl.textContent = '';
+  sbStatusEl.className = 'url-status';
+  const pretty = sbPretty(res.doc, res.xml);
+  let html;
+  try { html = sbAnalyze(res); } catch (e) { html = `<p class="url-status bad">Could not analyse this message: ${esc(e.message)}</p>`; }
+  html += `<section class="dc-card"><div class="sb-xml-head"><h3 class="dc-title">Decoded XML</h3><span class="spacer"></span>
+    ${sbCopyBtn(pretty.txt, '📋 Copy formatted')}${sbCopyBtn(res.xml, '📋 Copy original')}</div>
+    <p class="sb-note">The formatted view adds whitespace, which breaks XML signatures. Use “Copy original” if you need to re-verify or re-submit the message.</p>
+    <pre class="sb-xml">${pretty.html}</pre></section>`;
+  sbOut.innerHTML = html;
+  sbFillThumbs();
+}
+
+/* --- samples --- */
+const SB_SAMPLE_CERT = 'MIIC+DCCAeACCQDzHquyS2engzANBgkqhkiG9w0BAQsFADA+MQswCQYDVQQGEwJVUzEVMBMGA1UECgwMRXhhbXBsZSBDb3JwMRgwFgYDVQQDDA9pZHAuZXhhbXBsZS5jb20wHhcNMjYxMTE2MTc1NjI0WhcNMzYxMTEzMTc1NjI0WjA+MQswCQYDVQQGEwJVUzEVMBMGA1UECgwMRXhhbXBsZSBDb3JwMRgwFgYDVQQDDA9pZHAuZXhhbXBsZS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDOUthjGBa7l2vBLtjHodu2YpTKcvjc2CisZ9x4J4FIOTVuQJZRgxKPUQZGgL1Ws+ZQRvUPul9OVC57k/W4zBX/gjU2WkU7MqHqwFj9uP0meZrighQaHsBhQ61gaBfBwYmae6MVzlPgkk9d1jM8hB8vE5Q/TQ3LJuAeWS39AfpoJf0ZAkldSP5sudRaUkhHcJLMCphhVOmafd0WhhRzn04sWtsSF6GK7K6di5bEz3QofKtX/egsrms9pEfKIPneyM+rEOEgpzCUdwR3d5yxYnOLQcbc1TPJECkcqrGryP7RqOZ+CxIpzmaE+3+21UGd1obK3CkLaoWDCZv8nK7EXD9hAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAIN1pg3lgBuD2SYgVCyWul+XXu5JF7lPYWIVMIjYgZ1XspK+eT9O6e9BY/XwG62ziLEbGfCjgBFoHg5fE0o7AmYxasiAA6saNPQxBHKbP6L9ooDRNuSJf99VDk425d+zl2qt5AcWOvIX2uncnkVFD1WhZmCEzYpiPpaxF16WFQWv/O8260n3xbU0x2k6eGHBcCBoWmixEUMgGjB4CmNaEjwWtIqkaDXM/BFikToIFI24AUhMqofPHHEIZIqyw+IXOV7ymM7nLuNF/oa1Yg8PT0qlKY3NQ4pQNFeL5XWHSugEcl6wjFNoG33dZb4oM0K4kpKi64D4is5DmWCKfz1FJug=';
+const sbIso = ms => new Date(ms).toISOString().replace(/\.\d+Z$/, 'Z');
+const sbRand = n => sbBytesB64(crypto.getRandomValues(new Uint8Array(n)));
+const SB_REQ_ID = '_4fee3b046395c4e751011e97f8900b5273d56685';
+
+function sbSampleResponse() {
+  const now = Date.now(), t = sbIso(now), aid = '_d71a3a8e9fcc45c9e9d248ef7049393fc8f04e5f75';
+  const xml = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_8e8dc5f69a98cc4c1ff3427e5ce34606fd672f91e6" Version="2.0" IssueInstant="${t}" Destination="https://app.example.com/saml/acs" InResponseTo="${SB_REQ_ID}">`
+    + `<saml:Issuer>https://idp.example.com/saml</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>`
+    + `<saml:Assertion xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" ID="${aid}" Version="2.0" IssueInstant="${t}">`
+    + `<saml:Issuer>https://idp.example.com/saml</saml:Issuer>`
+    + `<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>`
+    + `<ds:Reference URI="#${aid}"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms>`
+    + `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>${sbRand(32)}</ds:DigestValue></ds:Reference></ds:SignedInfo>`
+    + `<ds:SignatureValue>${sbRand(256)}</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>${SB_SAMPLE_CERT}</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature>`
+    + `<saml:Subject><saml:NameID SPNameQualifier="https://app.example.com/saml/metadata" Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">jane.doe@example.com</saml:NameID>`
+    + `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData NotOnOrAfter="${sbIso(now + 300000)}" Recipient="https://app.example.com/saml/acs" InResponseTo="${SB_REQ_ID}"/></saml:SubjectConfirmation></saml:Subject>`
+    + `<saml:Conditions NotBefore="${sbIso(now - 30000)}" NotOnOrAfter="${sbIso(now + 300000)}"><saml:AudienceRestriction><saml:Audience>https://app.example.com/saml/metadata</saml:Audience></saml:AudienceRestriction></saml:Conditions>`
+    + `<saml:AuthnStatement AuthnInstant="${t}" SessionNotOnOrAfter="${sbIso(now + 8 * 3600000)}" SessionIndex="_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>`
+    + `<saml:AttributeStatement>`
+    + `<saml:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xsi:type="xs:string">jane.doe@example.com</saml:AttributeValue></saml:Attribute>`
+    + `<saml:Attribute Name="urn:oid:2.5.4.42" FriendlyName="givenName" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xsi:type="xs:string">Jane</saml:AttributeValue></saml:Attribute>`
+    + `<saml:Attribute Name="urn:oid:2.5.4.4" FriendlyName="sn" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue xsi:type="xs:string">Doe</saml:AttributeValue></saml:Attribute>`
+    + `<saml:Attribute Name="groups" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">Engineering</saml:AttributeValue><saml:AttributeValue xsi:type="xs:string">Admins</saml:AttributeValue></saml:Attribute>`
+    + `</saml:AttributeStatement></saml:Assertion></samlp:Response>`;
+  return sbBytesB64(new TextEncoder().encode(xml));
+}
+async function sbSampleRequest() {
+  const xml = `<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${SB_REQ_ID}" Version="2.0" IssueInstant="${sbIso(Date.now())}" Destination="https://idp.example.com/saml/sso" ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" AssertionConsumerServiceURL="https://app.example.com/saml/acs">`
+    + `<saml:Issuer>https://app.example.com/saml/metadata</saml:Issuer><samlp:NameIDPolicy Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" AllowCreate="true"/>`
+    + `<samlp:RequestedAuthnContext Comparison="exact"><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></samlp:RequestedAuthnContext></samlp:AuthnRequest>`;
+  const deflated = sbBytesB64(await sbStream(new TextEncoder().encode(xml), new CompressionStream('deflate-raw')));
+  return 'https://idp.example.com/saml/sso?SAMLRequest=' + encodeURIComponent(deflated)
+    + '&RelayState=' + encodeURIComponent('/dashboard?tab=billing')
+    + '&SigAlg=' + encodeURIComponent('http://www.w3.org/2001/04/xmldsig-more#rsa-sha256')
+    + '&Signature=' + encodeURIComponent(sbRand(256));
+}
+
+let sbTimer;
+sbInput.addEventListener('input', () => { clearTimeout(sbTimer); sbTimer = setTimeout(runSb, 250); });
+document.getElementById('sbDecode').onclick = () => { clearTimeout(sbTimer); runSb(); };
+document.getElementById('sbSampleResp').onclick = () => { sbInput.value = sbSampleResponse(); runSb(); };
+document.getElementById('sbSampleReq').onclick = async () => {
+  try { sbInput.value = await sbSampleRequest(); } catch { sbInput.value = ''; }
+  runSb();
+};
+document.getElementById('sbClear').onclick = () => { sbInput.value = ''; runSb(); sbInput.focus(); };
+sbOut.addEventListener('click', e => {
+  const b = e.target.closest('[data-sb-copy]');
+  if (b) copyText(sbCopies[+b.dataset.sbCopy], b);
+});
 
 /* boot with Unix Time Converter */
 selectTool('Unix Time Converter');

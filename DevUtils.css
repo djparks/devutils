@@ -475,3 +475,59 @@
   /* yaml <-> json tool */
   .url-tool.side-by-side{flex-direction:row}
   .url-tool.side-by-side .url-pane{flex:1 1 0;min-width:0}
+
+  /* SAML parser */
+  .sb-tool .nb-intro code{font:13px var(--mono);color:var(--j-num)}
+  .sb-tool .url-area.sb-input{flex:none;height:130px;margin-top:0;resize:vertical}
+  .sb-out{display:flex;flex-direction:column;gap:16px}
+  .sb-out:empty{display:none}
+  .sb-out .dc-cards{align-items:flex-start}
+  .sb-steps{display:flex;flex-wrap:wrap;gap:8px}
+  .sb-step{font-size:12.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted)}
+  .sb-step.done{color:var(--green);border-color:rgba(16,185,129,.45);background:rgba(16,185,129,.08)}
+  .sb-step.fail{color:#f87171;border-color:rgba(244,63,94,.55);background:rgba(244,63,94,.08)}
+  .sb-step.skip{opacity:.6}
+  #sbStatus:empty{display:none}
+  .sb-kv{border-collapse:collapse;width:100%;font-size:13px;table-layout:fixed}
+  .sb-kv th,.sb-kv td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;overflow-wrap:anywhere}
+  .sb-kv tr:last-child th,.sb-kv tr:last-child td{border-bottom:0}
+  .sb-kv th{width:170px;color:var(--text-dim);font-weight:500}
+  .sb-kv code{font:12.5px var(--mono);color:var(--j-str);word-break:break-all}
+  .sb-attrs th:first-child{width:240px}
+  .sb-attrs th b,.sb-attrs th .sb-dim{display:block}
+  .sb-attrs tr:first-child th,.sb-ep tr:first-child th{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted)}
+  .sb-ep th,.sb-ep td{width:auto}
+  .sb-name{font-weight:600;color:var(--text)}
+  .sb-dim{color:var(--text-muted);font-size:12px;margin-left:4px;word-break:break-all}
+  .sb-attrs .sb-dim{margin-left:0}
+  .sb-msg{margin-top:4px;color:var(--text)}
+  .sb-trunc{display:block;max-height:3.2em;overflow:hidden;text-overflow:ellipsis}
+  .sb-badge{display:inline-block;font:600 11px var(--ui);padding:1px 8px;border-radius:999px;vertical-align:2px;margin-right:4px;border:1px solid}
+  .sb-badge.ok{color:var(--green);border-color:rgba(16,185,129,.45);background:rgba(16,185,129,.1)}
+  .sb-badge.bad{color:#f87171;border-color:rgba(244,63,94,.5);background:rgba(244,63,94,.1)}
+  .sb-badge.warn{color:var(--j-num);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
+  .sb-badge.info{color:var(--sig-blue);border-color:rgba(56,189,248,.45);background:rgba(56,189,248,.1)}
+  .dc-title .sb-badge{margin-left:6px}
+  .sb-h{margin:6px 0 -6px;font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px}
+  .sb-h code{font:12.5px var(--mono);color:var(--j-key);text-transform:none}
+  .sb-note{margin:0;font-size:12.5px;color:var(--text-muted)}
+  .sb-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px}
+  .sb-checks li{display:flex;gap:9px;align-items:flex-start;line-height:1.45;overflow-wrap:anywhere}
+  .sb-ico{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--ui);margin-top:1px}
+  .sb-checks .ok .sb-ico{background:rgba(16,185,129,.18);color:var(--green)}
+  .sb-checks .bad .sb-ico{background:rgba(244,63,94,.2);color:#f87171}
+  .sb-checks .warn .sb-ico{background:rgba(251,191,36,.18);color:var(--j-num)}
+  .sb-checks .info .sb-ico{background:rgba(56,189,248,.18);color:var(--sig-blue)}
+  .sb-cert{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--field-bg)}
+  .sb-cert-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;font-size:13.5px}
+  .sb-xml-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .sb-xml{
+    margin:0;font:12.5px/1.6 var(--mono);color:var(--text);padding:12px 14px;border-radius:8px;overflow:auto;max-height:640px;
+    background:var(--field-bg);border:1px solid var(--border);white-space:pre-wrap;overflow-wrap:anywhere;
+  }
+  .sb-xml .t{color:var(--j-key)}
+  .sb-xml .a{color:var(--j-bool)}
+  .sb-xml .v{color:var(--j-str)}
+  .sb-xml .x{color:var(--text)}
+  .sb-xml .c{color:var(--text-muted)}
+  @media (max-width:700px){.sb-kv th{width:110px}.sb-attrs th:first-child{width:130px}}
