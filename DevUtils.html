@@ -643,6 +643,70 @@
         <div class="sb-out" id="sbOut"></div>
       </div>
 
+      <!-- JSON Path Highlighter Tool View -->
+      <div class="url-tool jp-tool" id="jpTool" style="display:none">
+        <div class="toolbar">
+          <span class="label">Path:</span>
+          <input type="text" class="nb-input jp-expr" id="jpExpr" placeholder="onlyIf[0].children[2]   ·   $.env['log.level']   ·   ..step   ·   owners[*]" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off">
+          <span class="jp-count" id="jpCount"></span>
+          <button class="btn icon" id="jpPrev" title="Previous match (Shift+Enter)">▲</button>
+          <button class="btn icon" id="jpNext" title="Next match (Enter)">▼</button>
+          <button class="btn" id="jpCopyValue" title="Copy the highlighted value">📋 Copy value</button>
+        </div>
+        <div class="url-status" id="jpStatus"></div>
+        <div class="toolbar">
+          <span class="label">JSON:</span>
+          <button class="btn" id="jpOpen">Open file…</button>
+          <input type="file" id="jpFile" accept=".json,application/json,text/plain" hidden>
+          <button class="btn" id="jpSample">Sample</button>
+          <button class="btn" id="jpFormat" title="Pretty-print with 2-space indentation">Format</button>
+          <button class="btn" id="jpClear">Clear</button>
+          <span class="spacer"></span>
+          <span class="jp-file" id="jpFileInfo"></span>
+        </div>
+        <div class="jp-editor" id="jpEditor">
+          <pre class="jp-back" id="jpBack" aria-hidden="true"></pre>
+          <textarea class="jp-text" id="jpText" wrap="off" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste JSON here, or drop a .json file"></textarea>
+          <div class="jp-drop">Drop the file to load it</div>
+        </div>
+        <div class="jp-cursor">
+          <span class="nb-label">Path at cursor:</span>
+          <code id="jpCursorPath">—</code>
+          <button class="btn" id="jpUsePath" title="Put this path into the Path box">Use</button>
+          <button class="btn" id="jpCopyPath">📋 Copy</button>
+        </div>
+      </div>
+
+      <!-- Text Comparator Tool View -->
+      <div class="url-tool nb-tool td-tool" id="tdTool" style="display:none">
+        <div class="toolbar">
+          <div class="cr-seg" id="tdView">
+            <button data-view="split" class="on">Side by side</button>
+            <button data-view="unified">Unified</button>
+          </div>
+          <label class="url-radio"><input type="checkbox" id="tdCase"> Ignore case</label>
+          <label class="url-radio"><input type="checkbox" id="tdWs"> Ignore whitespace</label>
+          <label class="url-radio"><input type="checkbox" id="tdEmpty"> Ignore empty lines</label>
+          <label class="url-radio"><input type="checkbox" id="tdChanges"> Only changes</label>
+          <span class="spacer"></span>
+          <button class="btn" id="tdSample">Sample</button>
+          <button class="btn" id="tdSwap">⇄ Swap</button>
+          <button class="btn" id="tdClear">Clear</button>
+        </div>
+        <div class="td-inputs">
+          <section class="url-pane">
+            <span class="nb-label">Original</span>
+            <textarea class="url-area td-area" id="tdA" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste the original text or drop a file"></textarea>
+          </section>
+          <section class="url-pane">
+            <span class="nb-label">Modified</span>
+            <textarea class="url-area td-area" id="tdB" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste the modified text or drop a file"></textarea>
+          </section>
+        </div>
+        <div class="td-stats" id="tdStats"></div>
+        <div class="td-out" id="tdOut"></div>
+      </div>
+
       <!-- Placeholder Tool View -->
       <div class="placeholder-tool" id="otherTool" style="display:none">
         <h3 id="otherToolName">Tool</h3>

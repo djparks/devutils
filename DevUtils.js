@@ -4,7 +4,7 @@ const TOOLS = [
   ['64','Base64 String Encode/Decode'],
   ['✳️','JWT Debugger'], ['%','URL Encode/Decode'],
   ['⇄','YAML / JSON / Properties'], ['01','Number Base Converter'],
-  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression'], ['🛡️','SAML Parser']
+  ['📅','Date Calculator'], ['#','Hash Generator'], ['🔐','Chmod Calculator'], ['ms','Milliseconds to Seconds'], ['⏰','Cron Expression'], ['🛡️','SAML Parser'], ['{}','JSON Path Highlighter'], ['≠','Text Comparator']
 ];
 
 let currentTool = 'Unix Time Converter';
@@ -44,6 +44,8 @@ function selectTool(name) {
   const msToolEl = document.getElementById('msTool');
   const crToolEl = document.getElementById('crTool');
   const sbToolEl = document.getElementById('sbTool');
+  const jpToolEl = document.getElementById('jpTool');
+  const tdToolEl = document.getElementById('tdTool');
   const otherToolEl = document.getElementById('otherTool');
 
   unixToolEl.style.display = 'none';
@@ -58,6 +60,8 @@ function selectTool(name) {
   msToolEl.style.display = 'none';
   crToolEl.style.display = 'none';
   sbToolEl.style.display = 'none';
+  jpToolEl.style.display = 'none';
+  tdToolEl.style.display = 'none';
   otherToolEl.style.display = 'none';
 
   if (name === 'Unix Time Converter') {
@@ -95,6 +99,12 @@ function selectTool(name) {
   } else if (name === 'SAML Parser') {
     sbToolEl.style.display = 'flex';
     runSb();
+  } else if (name === 'JSON Path Highlighter') {
+    jpToolEl.style.display = 'flex';
+    runJp(false);
+  } else if (name === 'Text Comparator') {
+    tdToolEl.style.display = 'flex';
+    runTd();
   } else {
     otherToolEl.style.display = 'flex';
     document.getElementById('otherToolName').textContent = name;
@@ -3721,6 +3731,626 @@ document.getElementById('sbClear').onclick = () => { sbInput.value = ''; runSb()
 sbOut.addEventListener('click', e => {
   const b = e.target.closest('[data-sb-copy]');
   if (b) copyText(sbCopies[+b.dataset.sbCopy], b);
+});
+
+/* ---------------- JSON Path Highlighter ---------------- */
+const jpText = document.getElementById('jpText');
+const jpBack = document.getElementById('jpBack');
+const jpExpr = document.getElementById('jpExpr');
+const jpStatus = document.getElementById('jpStatus');
+const jpCount = document.getElementById('jpCount');
+const jpEditor = document.getElementById('jpEditor');
+const jpCursorPath = document.getElementById('jpCursorPath');
+const jpFileInfo = document.getElementById('jpFileInfo');
+
+// JSON parser that keeps the source offsets of every value and key
+function jpParse(src) {
+  let i = 0;
+  const fail = msg => { const e = new Error(msg); e.pos = i; throw e; };
+  const ws = () => {
+    for (;;) {
+      const c = src.charCodeAt(i);
+      if (c === 32 || c === 9 || c === 10 || c === 13 || c === 0xfeff) i++; else break;
+    }
+  };
+  const ch = () => i < src.length ? `'${src[i]}'` : 'end of input';
+  function str() {
+    let out = '';
+    i++;
+    for (;;) {
+      if (i >= src.length) fail('Unterminated string');
+      const c = src[i];
+      if (c === '"') { i++; return out; }
+      if (c === '\\') {
+        const e = src[i + 1];
+        const map = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+        if (e in map) { out += map[e]; i += 2; }
+        else if (e === 'u' && /^[0-9a-fA-F]{4}$/.test(src.substr(i + 2, 4))) { out += String.fromCharCode(parseInt(src.substr(i + 2, 4), 16)); i += 6; }
+        else { i++; fail('Invalid escape sequence in string'); }
+      } else if (c.charCodeAt(0) < 32) fail('Control character in string (use \\n, \\t …)');
+      else { out += c; i++; }
+    }
+  }
+  const NUM = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+  function value() {
+    ws();
+    const start = i, c = src[i];
+    if (c === '{') {
+      i++;
+      const node = { type: 'object', start, entries: [], map: new Map() };
+      ws();
+      if (src[i] === '}') { i++; node.end = i; return node; }
+      for (;;) {
+        ws();
+        if (src[i] !== '"') fail(`Expected a "quoted" key but found ${ch()}`);
+        const keyStart = i, key = str(), keyEnd = i;
+        ws();
+        if (src[i] !== ':') fail(`Expected ':' after key "${key}" but found ${ch()}`);
+        i++;
+        const child = value();
+        const entry = { key, keyStart, keyEnd, node: child };
+        node.entries.push(entry); node.map.set(key, entry);
+        ws();
+        if (src[i] === ',') { i++; ws(); if (src[i] === '}') fail('Trailing comma before }'); continue; }
+        if (src[i] === '}') { i++; node.end = i; return node; }
+        fail(`Expected ',' or '}' but found ${ch()}`);
+      }
+    }
+    if (c === '[') {
+      i++;
+      const node = { type: 'array', start, items: [] };
+      ws();
+      if (src[i] === ']') { i++; node.end = i; return node; }
+      for (;;) {
+        node.items.push(value());
+        ws();
+        if (src[i] === ',') { i++; ws(); if (src[i] === ']') fail('Trailing comma before ]'); continue; }
+        if (src[i] === ']') { i++; node.end = i; return node; }
+        fail(`Expected ',' or ']' but found ${ch()}`);
+      }
+    }
+    if (c === '"') { const v = str(); return { type: 'string', start, end: i, value: v }; }
+    NUM.lastIndex = i;
+    const m = NUM.exec(src);
+    if (m && m[0] !== '-') { i += m[0].length; return { type: 'number', start, end: i }; }
+    for (const [w, t] of [['true', 'boolean'], ['false', 'boolean'], ['null', 'null']]) {
+      if (src.startsWith(w, i)) { i += w.length; return { type: t, start, end: i }; }
+    }
+    fail(`Unexpected ${ch()}`);
+  }
+  const root = value();
+  ws();
+  if (i < src.length) fail(`Unexpected ${ch()} after the end of the JSON`);
+  return root;
+}
+
+// Path expression parser: $.a.b, a[0].b, ['key'], [*], .*, ..name, [0,2], [1:3], [-1]
+function jpParsePath(expr) {
+  const s = expr.trim();
+  const steps = [];
+  let i = 0;
+  if (s[0] === '$' || s[0] === '@') i = 1;
+  const fail = msg => { throw new Error(msg); };
+  const name = rec => {
+    const m = s.slice(i).match(/^[^.[\]\s]+/);
+    if (!m) fail(`Expected a key name at position ${i + 1}`);
+    i += m[0].length;
+    steps.push(m[0] === '*' ? { kind: 'wild', rec } : { kind: 'name', v: m[0], rec });
+  };
+  const bracket = rec => {
+    i++;
+    const sels = [];
+    for (;;) {
+      while (s[i] === ' ') i++;
+      const q = s[i];
+      if (q === '"' || q === "'") {
+        let v = ''; i++;
+        while (i < s.length && s[i] !== q) { if (s[i] === '\\') i++; v += s[i++]; }
+        if (s[i] !== q) fail('Unterminated quoted key');
+        i++; sels.push({ kind: 'name', v });
+      } else if (q === '*') { i++; sels.push({ kind: 'wild' }); }
+      else {
+        const m = s.slice(i).match(/^(-?\d*)\s*(?::\s*(-?\d*)\s*(?::\s*(-?\d+))?)?/);
+        if (!m || !m[0].trim()) fail(`Expected an index, 'key' or * inside [ ] at position ${i + 1}`);
+        i += m[0].length;
+        if (m[0].includes(':')) sels.push({ kind: 'slice', a: m[1] === '' ? null : +m[1], b: m[2] === '' || m[2] === undefined ? null : +m[2], step: m[3] ? +m[3] : 1 });
+        else sels.push({ kind: 'index', v: +m[1] });
+      }
+      while (s[i] === ' ') i++;
+      if (s[i] === ',') { i++; continue; }
+      if (s[i] === ']') { i++; break; }
+      fail(`Expected ']' at position ${i + 1}`);
+    }
+    steps.push(sels.length === 1 ? { ...sels[0], rec } : { kind: 'union', sels, rec });
+  };
+  if (i === 0 && s && s[0] !== '.' && s[0] !== '[') name(false);
+  while (i < s.length) {
+    if (s.startsWith('..', i)) { i += 2; s[i] === '[' ? bracket(true) : name(true); }
+    else if (s[i] === '.') { i++; s[i] === '[' ? bracket(false) : name(false); }
+    else if (s[i] === '[') bracket(false);
+    else fail(`Unexpected '${s[i]}' at position ${i + 1}`);
+  }
+  return steps;
+}
+
+const jpSeg = k => typeof k === 'number' ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? `.${k}` : `['${k.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`;
+const jpPathStr = path => '$' + path.map(jpSeg).join('');
+function jpChildren(node) {
+  if (node.type === 'object') return node.entries.map(e => ({ node: e.node, key: e.key, entry: e }));
+  if (node.type === 'array') return node.items.map((n, i) => ({ node: n, key: i }));
+  return [];
+}
+function jpSelect(r, sel) {
+  const n = r.node, out = [];
+  const add = (node, key, entry) => out.push({ node, path: [...r.path, key], entry });
+  if (sel.kind === 'wild') jpChildren(n).forEach(c => add(c.node, c.key, c.entry));
+  else if (sel.kind === 'name') {
+    if (n.type === 'object' && n.map.has(sel.v)) { const e = n.map.get(sel.v); add(e.node, e.key, e); }
+    else if (n.type === 'array' && /^-?\d+$/.test(sel.v)) return jpSelect(r, { kind: 'index', v: +sel.v });
+  } else if (sel.kind === 'index' && n.type === 'array') {
+    const idx = sel.v < 0 ? n.items.length + sel.v : sel.v;
+    if (idx >= 0 && idx < n.items.length) add(n.items[idx], idx);
+  } else if (sel.kind === 'slice' && n.type === 'array') {
+    const len = n.items.length, norm = (v, d) => v === null ? d : v < 0 ? Math.max(0, len + v) : Math.min(v, len);
+    const step = sel.step || 1;
+    if (step > 0) for (let k = norm(sel.a, 0); k < norm(sel.b, len); k += step) add(n.items[k], k);
+    else for (let k = sel.a === null ? len - 1 : norm(sel.a, len - 1); k > (sel.b === null ? -1 : norm(sel.b, -1)); k += step) if (k < len) add(n.items[k], k);
+  } else if (sel.kind === 'union') sel.sels.forEach(s => out.push(...jpSelect(r, s)));
+  return out;
+}
+function jpEvaluate(root, steps) {
+  let cur = [{ node: root, path: [] }];
+  for (let si = 0; si < steps.length; si++) {
+    const step = steps[si];
+    let base = cur;
+    if (step.rec) {
+      base = [];
+      const walk = r => { base.push(r); jpChildren(r.node).forEach(c => walk({ node: c.node, path: [...r.path, c.key], entry: c.entry })); };
+      cur.forEach(walk);
+    }
+    const next = base.flatMap(r => jpSelect(r, step));
+    if (!next.length) return { results: [], failedAt: si, last: cur };
+    cur = next;
+  }
+  return { results: cur };
+}
+
+// Deepest node containing a text offset, with its path
+function jpPathAt(root, off) {
+  let r = { node: root, path: [] };
+  for (;;) {
+    const hit = jpChildren(r.node).find(c => off >= (c.entry ? c.entry.keyStart : c.node.start) && off < c.node.end);
+    if (!hit) return r;
+    r = { node: hit.node, path: [...r.path, hit.key], entry: hit.entry };
+  }
+}
+
+let jpRoot = null, jpErr = null, jpLines = [0], jpResults = [], jpIdx = 0, jpSrc = '';
+function jpLineCol(off) {
+  let lo = 0, hi = jpLines.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (jpLines[mid] <= off) lo = mid; else hi = mid - 1; }
+  return { line: lo + 1, col: off - jpLines[lo] + 1 };
+}
+function jpReparse() {
+  jpSrc = jpText.value;
+  jpLines = [0];
+  for (let i = 0; i < jpSrc.length; i++) if (jpSrc.charCodeAt(i) === 10) jpLines.push(i + 1);
+  jpRoot = null; jpErr = null;
+  if (!jpSrc.trim()) return;
+  try { jpRoot = jpParse(jpSrc); } catch (e) { jpErr = e; }
+}
+function jpSummary(node) {
+  if (node.type === 'object') return `object · ${node.entries.length} key${node.entries.length === 1 ? '' : 's'}`;
+  if (node.type === 'array') return `array · ${node.items.length} item${node.items.length === 1 ? '' : 's'}`;
+  const raw = jpSrc.slice(node.start, node.end);
+  return `${node.type} · ${raw.length > 60 ? raw.slice(0, 57) + '…' : raw}`;
+}
+
+function jpRender(scroll) {
+  const marks = [];
+  if (jpErr && jpErr.pos !== undefined) {
+    const p = Math.min(jpErr.pos, jpSrc.length);
+    marks.push({ s: p, e: Math.min(p + 1, jpSrc.length) || p, cls: 'jp-err' });
+  }
+  jpResults.forEach((r, k) => {
+    const cls = k === jpIdx ? 'jp-cur' : 'jp-oth';
+    if (r.entry) marks.push({ s: r.entry.keyStart, e: r.entry.keyEnd, cls: cls + ' jp-key', cur: k === jpIdx });
+    marks.push({ s: r.node.start, e: r.node.end, cls, cur: k === jpIdx });
+  });
+  // Keep the current match; drop other marks that overlap something already placed
+  marks.sort((a, b) => (b.cur ? 1 : 0) - (a.cur ? 1 : 0));
+  const placed = [];
+  for (const m of marks) if (!placed.some(p => m.s < p.e && p.s < m.e)) placed.push(m);
+  placed.sort((a, b) => a.s - b.s);
+  let html = '', pos = 0;
+  for (const m of placed) {
+    html += esc(jpSrc.slice(pos, m.s)) + `<mark class="${m.cls}">${esc(jpSrc.slice(m.s, m.e)) || ' '}</mark>`;
+    pos = m.e;
+  }
+  jpBack.innerHTML = html + esc(jpSrc.slice(pos)) + '\n ';
+  jpSyncScroll();
+  if (scroll) {
+    const el = jpBack.querySelector('mark.jp-cur') || jpBack.querySelector('mark.jp-err');
+    if (el) {
+      const top = el.offsetTop, left = el.offsetLeft;
+      if (top < jpText.scrollTop + 10 || top > jpText.scrollTop + jpText.clientHeight - 40) jpText.scrollTop = Math.max(0, top - jpText.clientHeight / 3);
+      if (left < jpText.scrollLeft || left > jpText.scrollLeft + jpText.clientWidth - 60) jpText.scrollLeft = Math.max(0, left - 40);
+      jpSyncScroll();
+    }
+  }
+}
+function jpSyncScroll() {
+  jpBack.scrollTop = jpText.scrollTop;
+  jpBack.scrollLeft = jpText.scrollLeft;
+}
+
+function jpSetStatus(html, cls = '') { jpStatus.innerHTML = html; jpStatus.className = 'url-status ' + cls; }
+
+function runJp(scroll = true) {
+  jpResults = []; jpIdx = 0;
+  jpExpr.classList.remove('err');
+  jpCount.textContent = '';
+  if (!jpSrc.trim()) {
+    jpSetStatus('Paste JSON, open a file or drop one onto the editor, then type a path such as <code>onlyIf[0].children[2]</code>.');
+    jpRender(false); jpUpdateCursor(); return;
+  }
+  if (jpErr) {
+    const lc = jpLineCol(jpErr.pos || 0);
+    jpSetStatus(`Invalid JSON at line ${lc.line}, column ${lc.col}: ${esc(jpErr.message)}`, 'bad');
+    jpRender(true); jpUpdateCursor(); return;
+  }
+  const expr = jpExpr.value.trim();
+  if (!expr || expr === '$') {
+    jpSetStatus(`Valid JSON · ${esc(jpSummary(jpRoot))} · ${jpLines.length} lines. Type a path above, or click in the JSON to see its path.`, 'ok');
+    jpRender(false); jpUpdateCursor(); return;
+  }
+  let steps;
+  try { steps = jpParsePath(expr); } catch (e) {
+    jpExpr.classList.add('err');
+    jpSetStatus(esc(e.message), 'bad');
+    jpRender(false); return;
+  }
+  const res = jpEvaluate(jpRoot, steps);
+  jpResults = res.results;
+  if (!jpResults.length) {
+    jpExpr.classList.add('err');
+    let hint = '';
+    if (res.last.length === 1) {
+      const n = res.last[0].node, at = jpPathStr(res.last[0].path);
+      if (n.type === 'object') hint = ` <code>${esc(at)}</code> has keys: ${n.entries.slice(0, 12).map(e => `<code>${esc(e.key)}</code>`).join(', ')}${n.entries.length > 12 ? ', …' : ''}`;
+      else if (n.type === 'array') hint = ` <code>${esc(at)}</code> is an array with ${n.items.length} item${n.items.length === 1 ? '' : 's'} (indexes 0–${n.items.length - 1}).`;
+      else hint = ` <code>${esc(at)}</code> is a ${n.type}, so it has no children.`;
+      jpResults = [];
+      jpRender(false);
+    } else jpRender(false);
+    jpSetStatus(`No match.${hint}`, 'bad');
+    jpUpdateCursor();
+    return;
+  }
+  jpShowMatch(scroll);
+}
+function jpShowMatch(scroll = true) {
+  const r = jpResults[jpIdx];
+  const lc = jpLineCol(r.entry ? r.entry.keyStart : r.node.start);
+  jpCount.textContent = `${jpIdx + 1} of ${jpResults.length}`;
+  jpSetStatus(`<code>${esc(jpPathStr(r.path))}</code> · ${esc(jpSummary(r.node))} · line ${lc.line}, column ${lc.col}`, 'ok');
+  jpRender(scroll);
+}
+function jpStep(d) {
+  if (!jpResults.length) return;
+  jpIdx = (jpIdx + d + jpResults.length) % jpResults.length;
+  jpShowMatch(true);
+}
+let jpCursor = null;
+function jpUpdateCursor() {
+  jpCursor = null;
+  if (jpRoot && document.activeElement === jpText) {
+    const r = jpPathAt(jpRoot, jpText.selectionStart);
+    jpCursor = jpPathStr(r.path);
+  }
+  jpCursorPath.textContent = jpCursor || '—';
+}
+
+function jpLoad(text, name) {
+  jpText.value = text;
+  jpFileInfo.textContent = name ? `${name} · ${text.length.toLocaleString()} characters` : '';
+  jpReparse(); runJp();
+}
+function jpReadFile(file) {
+  if (!file) return;
+  file.text().then(t => jpLoad(t, file.name)).catch(() => jpSetStatus('Could not read ' + esc(file.name), 'bad'));
+}
+// Pretty-print from the parsed tree so numbers keep their exact text
+function jpFormat(node, ind = '') {
+  const nx = ind + '  ';
+  if (node.type === 'object') return node.entries.length ? '{\n' + node.entries.map(e => nx + jpSrc.slice(e.keyStart, e.keyEnd) + ': ' + jpFormat(e.node, nx)).join(',\n') + '\n' + ind + '}' : '{}';
+  if (node.type === 'array') return node.items.length ? '[\n' + node.items.map(n => nx + jpFormat(n, nx)).join(',\n') + '\n' + ind + ']' : '[]';
+  return jpSrc.slice(node.start, node.end);
+}
+
+const JP_SAMPLE = {
+  name: 'deploy-pipeline', version: 3,
+  onlyIf: [
+    { branch: 'main', children: [{ step: 'checkout' }, { step: 'build', cache: true }, { step: 'test', parallel: 4, retries: 2 }, { step: 'package' }] },
+    { branch: 'release/*', children: [{ step: 'checkout' }, { step: 'sign', keyId: 'prod-2026' }] }
+  ],
+  env: { REGION: 'us-east-1', 'log.level': 'info', timeoutMs: 300000 },
+  owners: ['platform-team', 'sre']
+};
+
+let jpTimer;
+jpText.addEventListener('input', () => { clearTimeout(jpTimer); jpTimer = setTimeout(() => { jpReparse(); runJp(false); }, 200); });
+jpText.addEventListener('scroll', jpSyncScroll);
+['click', 'keyup', 'focus'].forEach(ev => jpText.addEventListener(ev, () => { if (!jpTimer || jpSrc === jpText.value) jpUpdateCursor(); }));
+jpExpr.addEventListener('input', () => runJp(true));
+jpExpr.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); jpStep(e.shiftKey ? -1 : 1); } });
+document.getElementById('jpPrev').onclick = () => jpStep(-1);
+document.getElementById('jpNext').onclick = () => jpStep(1);
+document.getElementById('jpOpen').onclick = () => document.getElementById('jpFile').click();
+document.getElementById('jpFile').onchange = e => { jpReadFile(e.target.files[0]); e.target.value = ''; };
+document.getElementById('jpSample').onclick = () => { jpLoad(JSON.stringify(JP_SAMPLE, null, 2), ''); if (!jpExpr.value.trim()) { jpExpr.value = 'onlyIf[0].children[2]'; runJp(); } };
+document.getElementById('jpFormat').onclick = () => { if (jpRoot) { const name = jpFileInfo.textContent.split(' · ')[0]; jpLoad(jpFormat(jpRoot), name); } };
+document.getElementById('jpClear').onclick = () => { jpLoad('', ''); jpText.focus(); };
+document.getElementById('jpCopyPath').onclick = e => { if (jpCursor) copyText(jpCursor, e.currentTarget); };
+document.getElementById('jpUsePath').onclick = () => { if (jpCursor) { jpExpr.value = jpCursor; runJp(true); } };
+document.getElementById('jpCopyValue').onclick = e => { const r = jpResults[jpIdx]; if (r) copyText(jpSrc.slice(r.node.start, r.node.end), e.currentTarget); };
+// drag & drop
+let jpDrag = 0;
+jpEditor.addEventListener('dragenter', e => { e.preventDefault(); jpDrag++; jpEditor.classList.add('drag'); });
+jpEditor.addEventListener('dragover', e => e.preventDefault());
+jpEditor.addEventListener('dragleave', () => { if (--jpDrag <= 0) { jpDrag = 0; jpEditor.classList.remove('drag'); } });
+jpEditor.addEventListener('drop', e => {
+  e.preventDefault(); jpDrag = 0; jpEditor.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) jpReadFile(f);
+  else { const t = e.dataTransfer.getData('text/plain'); if (t) jpLoad(t, ''); }
+});
+jpReparse();
+
+/* ---------------- Text Comparator ---------------- */
+const tdA = document.getElementById('tdA');
+const tdB = document.getElementById('tdB');
+const tdOut = document.getElementById('tdOut');
+const tdStats = document.getElementById('tdStats');
+let tdView = 'split';
+
+// Myers O(ND) diff on two arrays of comparable keys -> [['=',i,j] | ['-',i,-1] | ['+',-1,j]]
+function tdDiff(a, b) {
+  let s = 0;
+  while (s < a.length && s < b.length && a[s] === b[s]) s++;
+  let ea = a.length, eb = b.length;
+  while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
+  const A = a.slice(s, ea), B = b.slice(s, eb), n = A.length, m = B.length;
+  const ops = [];
+  for (let k = 0; k < s; k++) ops.push(['=', k, k]);
+  if (!n) B.forEach((_, j) => ops.push(['+', -1, j + s]));
+  else if (!m) A.forEach((_, i) => ops.push(['-', i + s, -1]));
+  else {
+    const max = n + m, off = max + 1, v = new Int32Array(2 * max + 3), trace = [];
+    let D = 0;
+    outer: for (let d = 0; d <= max; d++) {
+      trace.push(v.slice(off - d - 1, off + d + 2));
+      for (let k = -d; k <= d; k += 2) {
+        let x = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? v[off + k + 1] : v[off + k - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && A[x] === B[y]) { x++; y++; }
+        v[off + k] = x;
+        if (x >= n && y >= m) { D = d; break outer; }
+      }
+    }
+    const mid = [];
+    let x = n, y = m;
+    for (let d = D; d > 0; d--) {
+      const g = k => trace[d][k + d + 1];
+      const k = x - y;
+      const pk = (k === -d || (k !== d && g(k - 1) < g(k + 1))) ? k + 1 : k - 1;
+      const px = g(pk), py = px - pk;
+      while (x > px && y > py) { mid.push(['=', x - 1 + s, y - 1 + s]); x--; y--; }
+      if (pk === k + 1) mid.push(['+', -1, y - 1 + s]); else mid.push(['-', x - 1 + s, -1]);
+      x = px; y = py;
+    }
+    while (x > 0 && y > 0) { mid.push(['=', x - 1 + s, y - 1 + s]); x--; y--; }
+    ops.push(...mid.reverse());
+  }
+  for (let k = 0; k < a.length - ea; k++) ops.push(['=', ea + k, eb + k]);
+  return ops;
+}
+
+function tdOpts() {
+  return {
+    case: document.getElementById('tdCase').checked,
+    ws: document.getElementById('tdWs').checked,
+    empty: document.getElementById('tdEmpty').checked,
+    changes: document.getElementById('tdChanges').checked
+  };
+}
+function tdKey(s, o) {
+  if (o.ws) s = s.replace(/\s+/g, ' ').trim();
+  if (o.case) s = s.toLowerCase();
+  return s;
+}
+
+// Word-level diff of two lines, refined to characters inside small changed hunks
+function tdInline(a, b, o) {
+  const tok = s => s.match(/[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu) || [];
+  const key = t => { let k = o.case ? t.toLowerCase() : t; if (o.ws && /^\s+$/.test(k)) k = ' '; return k; };
+  const ta = tok(a), tb = tok(b);
+  const ops = tdDiff(ta.map(key), tb.map(key));
+  const L = [], R = [];
+  let dA = '', dB = '', same = 0;
+  const flush = () => {
+    if (!dA && !dB) return;
+    if (dA && dB && dA.length <= 200 && dB.length <= 200) {
+      const ca = [...dA], cb = [...dB];
+      const k = c => o.case ? c.toLowerCase() : c;
+      const cops = tdDiff(ca.map(k), cb.map(k));
+      const common = cops.filter(x => x[0] === '=').length;
+      if (common >= Math.max(ca.length, cb.length) * 0.5) {
+        for (const [t, i, j] of cops) {
+          if (t === '=') { L.push([ca[i], 0]); R.push([cb[j], 0]); same += ca[i].length; }
+          else if (t === '-') L.push([ca[i], 1]); else R.push([cb[j], 1]);
+        }
+        dA = dB = ''; return;
+      }
+    }
+    if (dA) L.push([dA, 1]);
+    if (dB) R.push([dB, 1]);
+    dA = dB = '';
+  };
+  for (const [t, i, j] of ops) {
+    if (t === '=') { flush(); L.push([ta[i], 0]); R.push([tb[j], 0]); same += ta[i].length; }
+    else if (t === '-') dA += ta[i]; else dB += tb[j];
+  }
+  flush();
+  return { L, R, sim: (2 * same) / ((a.length + b.length) || 1) };
+}
+function tdSegHtml(segs, cls, o) {
+  let html = '', buf = '', flag = 0;
+  const out = () => { if (buf) html += flag ? `<span class="${cls}">${esc(buf)}</span>` : esc(buf); buf = ''; };
+  for (const [t, f0] of segs) {
+    const f = f0 && !(o.ws && /^\s+$/.test(t)) ? 1 : 0;
+    if (f !== flag) { out(); flag = f; }
+    buf += t;
+  }
+  out();
+  return html;
+}
+
+function tdBuildRows(o) {
+  const split = s => { const lines = s.split(/\r\n|\r|\n/); return lines.map((t, i) => ({ t, n: i + 1 })); };
+  let la = split(tdA.value), lb = split(tdB.value);
+  if (o.empty) { la = la.filter(l => l.t.trim()); lb = lb.filter(l => l.t.trim()); }
+  const ops = tdDiff(la.map(l => tdKey(l.t, o)), lb.map(l => tdKey(l.t, o)));
+  const rows = [];
+  let dels = [], adds = [];
+  const flush = () => {
+    const pairs = Math.min(dels.length, adds.length);
+    const block = [];
+    for (let k = 0; k < Math.max(dels.length, adds.length); k++) {
+      const a = dels[k], b = adds[k];
+      if (k < pairs) {
+        const inl = tdInline(a.t, b.t, o);
+        if (inl.sim >= 0.35) block.push({ type: 'mod', a, b, L: tdSegHtml(inl.L, 'td-del', o), R: tdSegHtml(inl.R, 'td-ins', o) });
+        else block.push({ type: 'mod', a, b, L: esc(a.t), R: esc(b.t), whole: true });
+      } else if (a) block.push({ type: 'del', a, L: esc(a.t) });
+      else block.push({ type: 'add', b, R: esc(b.t) });
+    }
+    rows.push(...block);
+    dels = []; adds = [];
+  };
+  for (const [t, i, j] of ops) {
+    if (t === '=') { flush(); rows.push({ type: 'eq', a: la[i], b: lb[j], L: esc(la[i].t), R: esc(lb[j].t) }); }
+    else if (t === '-') dels.push(la[i]);
+    else adds.push(lb[j]);
+  }
+  flush();
+  return rows;
+}
+
+function tdCollapse(rows, ctx = 3) {
+  const keep = rows.map(() => false);
+  rows.forEach((r, i) => { if (r.type !== 'eq') for (let k = Math.max(0, i - ctx); k <= Math.min(rows.length - 1, i + ctx); k++) keep[k] = true; });
+  const out = [];
+  for (let i = 0; i < rows.length;) {
+    if (keep[i]) { out.push(rows[i++]); continue; }
+    let j = i; while (j < rows.length && !keep[j]) j++;
+    out.push({ type: 'gap', n: j - i });
+    i = j;
+  }
+  return out;
+}
+
+function runTd() {
+  const o = tdOpts();
+  if (!tdA.value && !tdB.value) {
+    tdStats.innerHTML = '<span class="url-status">Paste or drop two texts to compare. Differences are highlighted down to the word or character.</span>';
+    tdOut.innerHTML = '';
+    return;
+  }
+  let rows = tdBuildRows(o);
+  const cnt = { add: 0, del: 0, mod: 0 };
+  rows.forEach(r => { if (r.type in cnt) cnt[r.type]++; });
+  const identical = !cnt.add && !cnt.del && !cnt.mod;
+  tdStats.innerHTML = identical
+    ? `<span class="td-stat same">✓ No differences${o.case || o.ws || o.empty ? ' (with the selected ignore options)' : ''}</span>`
+    : `<span class="td-stat add">+${cnt.add} added</span><span class="td-stat del">−${cnt.del} removed</span><span class="td-stat mod">~${cnt.mod} modified</span>`;
+  if (o.changes && !identical) rows = tdCollapse(rows);
+  const ln = l => l ? l.n : '';
+  let html = '';
+  if (tdView === 'split') {
+    html = '<table class="td-table td-split"><colgroup><col class="td-ln"><col><col class="td-ln"><col></colgroup>';
+    for (const r of rows) {
+      if (r.type === 'gap') { html += `<tr class="td-gap"><td colspan="4">⋯ ${r.n} unchanged line${r.n === 1 ? '' : 's'}</td></tr>`; continue; }
+      const lc = r.type === 'eq' ? '' : r.a ? (r.whole || r.type === 'del' ? 'del whole' : 'del') : 'none';
+      const rc = r.type === 'eq' ? '' : r.b ? (r.whole || r.type === 'add' ? 'add whole' : 'add') : 'none';
+      html += `<tr><td class="td-n ${lc}">${ln(r.a)}</td><td class="td-c ${lc}">${r.a ? r.L || ' ' : ''}</td><td class="td-n ${rc}">${ln(r.b)}</td><td class="td-c ${rc}">${r.b ? r.R || ' ' : ''}</td></tr>`;
+    }
+  } else {
+    html = '<table class="td-table td-unified"><colgroup><col class="td-ln"><col class="td-ln"><col class="td-sign"><col></colgroup>';
+    const line = (cls, a, b, sign, body) => `<tr class="${cls}"><td class="td-n">${a}</td><td class="td-n">${b}</td><td class="td-s">${sign}</td><td class="td-c">${body || ' '}</td></tr>`;
+    // Within a changed block, show all removed lines and then all added lines (git style)
+    let block = [];
+    const flush = () => {
+      for (const r of block) if (r.a) html += line('del' + (r.whole || r.type === 'del' ? ' whole' : ''), r.a.n, '', '−', r.L);
+      for (const r of block) if (r.b) html += line('add' + (r.whole || r.type === 'add' ? ' whole' : ''), '', r.b.n, '+', r.R);
+      block = [];
+    };
+    for (const r of rows) {
+      if (r.type === 'gap') { flush(); html += `<tr class="td-gap"><td colspan="4">⋯ ${r.n} unchanged line${r.n === 1 ? '' : 's'}</td></tr>`; }
+      else if (r.type === 'eq') { flush(); html += line('', r.a.n, r.b.n, '', r.L); }
+      else block.push(r);
+    }
+    flush();
+  }
+  tdOut.innerHTML = html + '</table>';
+}
+
+const TD_SAMPLE_A = `server:
+  host: api.example.com
+  port: 8080
+  timeout: 30s
+logging:
+  level: info
+  format: json
+features:
+  - search
+  - export
+  - billing`;
+const TD_SAMPLE_B = `server:
+  host: api.example.org
+  port: 8443
+  timeout: 30s
+  tls: true
+logging:
+  level: debug
+  format: json
+features:
+  - search
+  - billing
+  - audit-log`;
+
+let tdTimer;
+const tdSchedule = () => { clearTimeout(tdTimer); tdTimer = setTimeout(runTd, 150); };
+[tdA, tdB].forEach(t => t.addEventListener('input', tdSchedule));
+['tdCase', 'tdWs', 'tdEmpty', 'tdChanges'].forEach(id => document.getElementById(id).addEventListener('change', runTd));
+document.querySelectorAll('#tdView button').forEach(b => b.onclick = () => {
+  tdView = b.dataset.view;
+  document.querySelectorAll('#tdView button').forEach(x => x.classList.toggle('on', x === b));
+  runTd();
+});
+document.getElementById('tdSample').onclick = () => { tdA.value = TD_SAMPLE_A; tdB.value = TD_SAMPLE_B; runTd(); };
+document.getElementById('tdSwap').onclick = () => { [tdA.value, tdB.value] = [tdB.value, tdA.value]; runTd(); };
+document.getElementById('tdClear').onclick = () => { tdA.value = tdB.value = ''; runTd(); tdA.focus(); };
+[tdA, tdB].forEach(t => {
+  t.addEventListener('dragover', e => { e.preventDefault(); t.classList.add('drag'); });
+  t.addEventListener('dragleave', () => t.classList.remove('drag'));
+  t.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    t.classList.remove('drag');
+    if (!f) return;
+    e.preventDefault();
+    f.text().then(txt => { t.value = txt; runTd(); });
+  });
 });
 
 /* boot with Unix Time Converter */
